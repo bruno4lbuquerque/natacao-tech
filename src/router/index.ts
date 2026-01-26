@@ -2,14 +2,12 @@ import { createRouter, createWebHistory } from "vue-router";
 import { supabase } from "@/core/services/supabase";
 import AppLayout from "@/layouts/AppLayout.vue";
 
-// Lazy Loading das Views
 const LoginView = () => import("@/modules/auth/views/LoginView.vue");
 const AssessmentsView = () =>
   import("@/modules/assessments/views/AssessmentsView.vue");
 const AttendanceView = () =>
   import("@/modules/attendance/views/AttendanceView.vue");
 
-// MUDANÇA: Importando o novo arquivo do Dashboard
 const DashboardView = () =>
   import("@/modules/dashboard/views/DashboardView.vue");
 
@@ -30,7 +28,7 @@ const router = createRouter({
         {
           path: "",
           name: "dashboard",
-          component: DashboardView, // Agora usa o componente real
+          component: DashboardView,
         },
         {
           path: "assessments",
@@ -47,15 +45,13 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  // Modo DEV: Permite acesso se não tiver sessão, só para você ver o layout
   if (requiresAuth && !session) {
-    // console.warn("Modo DEV: Acesso permitido sem login."); // Comentei para limpar o console
     next();
   } else if (to.path === "/login" && session) {
     next("/");

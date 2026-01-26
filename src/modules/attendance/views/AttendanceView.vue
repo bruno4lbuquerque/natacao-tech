@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref } from "vue";
 import { useToast } from "primevue/usetoast";
 
-// Componentes UI
 import Button from "primevue/button";
 import Calendar from "primevue/calendar";
 import Dropdown from "primevue/dropdown";
 import Tag from "primevue/tag";
-import Card from "primevue/card";
 
-// Mock Data (Reutilizando estrutura)
+// Mock Data
 const MOCK_CLASSES = [
   { name: "Segunda e Quarta - 09:00", code: "T1" },
   { name: "Terça e Quinta - 15:00", code: "T2" },
@@ -53,17 +51,14 @@ const MOCK_STUDENTS = [
   },
 ];
 
-// Estado
 const selectedClass = ref(MOCK_CLASSES[0]);
 const selectedDate = ref(new Date());
-const attendanceMap = ref<Record<string, boolean>>({}); // ID -> Presente (true/false)
+const attendanceMap = ref<Record<string, boolean>>({});
 const loading = ref(false);
 const toast = useToast();
 
-// Inicializa todos como "Presente" por padrão (facilita pro professor)
 MOCK_STUDENTS.forEach((s) => (attendanceMap.value[s.id] = true));
 
-// Lógica de Cores para Frequência
 function getStatusColor(status: string) {
   switch (status) {
     case "excelente":
@@ -79,14 +74,12 @@ function getStatusColor(status: string) {
   }
 }
 
-// Salvar Chamada
 async function saveAttendance() {
   loading.value = true;
 
-  // Simula delay de rede
   setTimeout(() => {
     console.log("Payload para Supabase:", {
-      class_id: selectedClass.value.code,
+      class_id: selectedClass.value?.code,
       date: selectedDate.value,
       records: Object.entries(attendanceMap.value).map(
         ([student_id, present]) => ({

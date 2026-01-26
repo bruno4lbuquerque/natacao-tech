@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import BatchEvaluationWizard from "../components/BatchEvaluationWizard.vue";
+import { useToast } from "primevue/usetoast";
 
-// Componentes PrimeVue
 import Dropdown from "primevue/dropdown";
 import Button from "primevue/button";
 import Card from "primevue/card";
+import Dialog from "primevue/dialog";
+import ProgressBar from "primevue/progressbar";
 
-// --- MOCKS (Dados Falsos para a Seleção) ---
+const toast = useToast();
+
+// --- MOCKS ---
 const MOCK_CLASSES = [
   { name: "Segunda e Quarta - 09:00", code: "T1" },
   { name: "Terça e Quinta - 15:00", code: "T2" },
@@ -21,17 +25,16 @@ const MOCK_LEVELS = [
   { name: "Acqua Expert (Touca Preta)", code: "expert" },
 ];
 
-// --- ESTADO ---
 const step = ref<"selection" | "wizard" | "success">("selection");
 const selectedClass = ref();
 const selectedLevel = ref();
 const loading = ref(false);
+const generatingPdf = ref(false);
+const showWhatsappModal = ref(false);
 
-// --- AÇÕES ---
 function startEvaluation() {
   if (selectedClass.value && selectedLevel.value) {
     loading.value = true;
-    // Simulando um "carregamento" dos alunos
     setTimeout(() => {
       loading.value = false;
       step.value = "wizard";
@@ -39,15 +42,80 @@ function startEvaluation() {
   }
 }
 
-function handleWizardFinish(answers: any) {
-  console.log("Respostas capturadas:", answers);
-  // Aqui enviaríamos para o Supabase
+function handleWizardFinish(data: any) {
+  console.log("Dados finais para salvar:", data);
+  // Aqui entraria o código do Supabase
   step.value = "success";
+}
+
+function generateReports() {
+  generatingPdf.value = true;
+  toast.add({
+    severity: "info",
+    summary: "Gerando PDFs",
+    detail: "Compilando gráficos e feedbacks...",
+    life: 2000,
+  });
+
+  setTimeout(() => {
+    generatingPdf.value = false;
+    toast.add({
+      severity: "success",
+      summary: "Sucesso",
+      detail: "3 Relatórios gerados com sucesso!",
+      life: 3000,
+    });
+  }, 2500);
+}
+
+function openWhatsappModal() {
+  showWhatsappModal.value = true;
+}
+
+function sendWhatsappLink() {
+  showWhatsappModal.value = false;
+  toast.add({
+    severity: "success",
+    summary: "Enviado",
+    detail: "Links enviados para os responsáveis via WhatsApp API.",
+    life: 3000,
+  });
+
+  // Exemplo de link real: window.open(`https://wa.me/5511999999999?text=Olá, segue o relatório...`)
 }
 </script>
 
 <template>
   <div class="max-w-4xl mx-auto">
+    <Dialog
+      v-model:visible="showWhatsappModal"
+      modal
+      header="Enviar Relatórios"
+      :style="{ width: '90vw', maxWidth: '400px' }"
+    >
+      <div class="text-center p-4">
+        <i class="pi pi-whatsapp text-green-500 text-5xl mb-4"></i>
+        <p class="text-gray-600 mb-6">
+          Deseja enviar o link do relatório automaticamente para os
+          <b>3 alunos</b> avaliados desta turma?
+        </p>
+        <div class="flex gap-2 justify-center">
+          <Button
+            label="Cancelar"
+            severity="secondary"
+            @click="showWhatsappModal = false"
+            text
+          />
+          <Button
+            label="Confirmar Envio"
+            severity="success"
+            icon="pi pi-send"
+            @click="sendWhatsappLink"
+          />
+        </div>
+      </div>
+    </Dialog>
+
     <div
       class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4"
     >
@@ -60,7 +128,7 @@ function handleWizardFinish(answers: any) {
 
       <Button
         v-if="step === 'wizard'"
-        label="Cancelar Avaliação"
+        label="Cancelar"
         icon="pi pi-times"
         severity="secondary"
         text
@@ -84,7 +152,7 @@ function handleWizardFinish(answers: any) {
                   v-model="selectedClass"
                   :options="MOCK_CLASSES"
                   optionLabel="name"
-                  placeholder="Ex: Terça e Quinta..."
+                  placeholder="Selecione..."
                   class="w-full"
                 />
               </div>
@@ -97,18 +165,15 @@ function handleWizardFinish(answers: any) {
                   v-model="selectedLevel"
                   :options="MOCK_LEVELS"
                   optionLabel="name"
-                  placeholder="Ex: Acqua Expert"
+                  placeholder="Selecione..."
                   class="w-full"
                 />
-                <small class="text-gray-500">
-                  Isso carregará as perguntas específicas deste nível.
-                </small>
               </div>
 
               <Button
                 label="Iniciar Avaliação"
                 icon="pi pi-play"
-                class="w-full p-button-lg font-bold"
+                class="w-full font-bold"
                 :loading="loading"
                 :disabled="!selectedClass || !selectedLevel"
                 @click="startEvaluation"
@@ -127,8 +192,8 @@ function handleWizardFinish(answers: any) {
             Avaliação Rápida
           </h3>
           <p class="text-brand-700 leading-relaxed">
-            Otimize seu tempo na piscina. Avalie até 10 alunos simultaneamente
-            seguindo o fluxo de perguntas da metodologia Acqua Kids.
+            Otimize seu tempo. Avalie múltiplos alunos e gere relatórios com
+            gráficos automáticos ao final.
           </p>
         </div>
       </div>
@@ -137,20 +202,105 @@ function handleWizardFinish(answers: any) {
         <BatchEvaluationWizard @finish="handleWizardFinish" />
       </div>
 
-      <div
-        v-else-if="step === 'success'"
-        class="text-center py-20 bg-white rounded-2xl border border-green-100 shadow-sm"
-      >
+      <div v-else-if="step === 'success'" class="max-w-2xl mx-auto">
         <div
-          class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4"
+          class="bg-white rounded-2xl border border-green-100 shadow-lg overflow-hidden"
         >
-          <i class="pi pi-check text-4xl font-bold"></i>
+          <div class="bg-green-50 p-8 text-center border-b border-green-100">
+            <div
+              class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce"
+            >
+              <i class="pi pi-check text-4xl font-bold"></i>
+            </div>
+            <h2 class="text-3xl font-bold text-gray-800">
+              Avaliação Concluída!
+            </h2>
+            <p class="text-gray-600 mt-2">
+              Os dados da turma <b>{{ selectedClass.name }}</b> foram salvos.
+            </p>
+          </div>
+
+          <div class="p-8 space-y-6">
+            <h3
+              class="font-bold text-gray-700 text-lg border-l-4 border-brand-500 pl-3"
+            >
+              O que você deseja fazer agora?
+            </h3>
+
+            <div
+              class="p-4 border border-gray-200 rounded-xl hover:border-brand-300 transition-colors flex items-center justify-between group"
+            >
+              <div class="flex items-center gap-4">
+                <div
+                  class="w-12 h-12 bg-red-100 text-red-600 rounded-lg flex items-center justify-center"
+                >
+                  <i class="pi pi-file-pdf text-xl"></i>
+                </div>
+                <div>
+                  <h4
+                    class="font-bold text-gray-800 group-hover:text-brand-600"
+                  >
+                    Baixar Relatórios PDF
+                  </h4>
+                  <p class="text-sm text-gray-500">
+                    Inclui gráficos de evolução e feedback.
+                  </p>
+                </div>
+              </div>
+              <Button
+                label="Gerar"
+                icon="pi pi-download"
+                severity="danger"
+                text
+                @click="generateReports"
+                :loading="generatingPdf"
+              />
+            </div>
+            <ProgressBar
+              v-if="generatingPdf"
+              mode="indeterminate"
+              style="height: 4px"
+              class="mb-4"
+            />
+
+            <div
+              class="p-4 border border-gray-200 rounded-xl hover:border-green-300 transition-colors flex items-center justify-between group"
+            >
+              <div class="flex items-center gap-4">
+                <div
+                  class="w-12 h-12 bg-green-100 text-green-600 rounded-lg flex items-center justify-center"
+                >
+                  <i class="pi pi-whatsapp text-xl"></i>
+                </div>
+                <div>
+                  <h4
+                    class="font-bold text-gray-800 group-hover:text-green-600"
+                  >
+                    Enviar para Responsáveis
+                  </h4>
+                  <p class="text-sm text-gray-500">
+                    Envia o link do relatório via WhatsApp.
+                  </p>
+                </div>
+              </div>
+              <Button
+                label="Enviar"
+                icon="pi pi-send"
+                severity="success"
+                text
+                @click="openWhatsappModal"
+              />
+            </div>
+
+            <div class="pt-6 border-t border-gray-100 text-center">
+              <Button
+                label="Voltar ao Início"
+                severity="secondary"
+                @click="step = 'selection'"
+              />
+            </div>
+          </div>
         </div>
-        <h2 class="text-2xl font-bold text-gray-800">Avaliação Salva!</h2>
-        <p class="text-gray-500 mb-8">
-          Os dados foram registrados com sucesso.
-        </p>
-        <Button label="Voltar ao Início" @click="step = 'selection'" />
       </div>
     </transition>
   </div>

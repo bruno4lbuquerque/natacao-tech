@@ -10,7 +10,7 @@ const route = useRoute();
 
 const menuItems = [
   { label: "Dashboard", icon: "pi pi-home", route: "/" },
-  { label: "Chamada", icon: "pi pi-calendar-plus", route: "/attendance" },
+  // { label: "Chamada", icon: "pi pi-calendar-plus", route: "/attendance" }, //
   { label: "Avaliações", icon: "pi pi-check-circle", route: "/assessments" },
   { label: "Turmas", icon: "pi pi-calendar", route: "/classes" },
   { label: "Alunos", icon: "pi pi-users", route: "/students" },
