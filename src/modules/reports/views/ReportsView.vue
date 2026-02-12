@@ -1,94 +1,126 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import { useToast } from "primevue/usetoast";
+import { ref, computed } from 'vue'
+import { useToast } from 'primevue/usetoast'
+import api from '@/core/services/api'
 
-// Componentes
-import Select from "primevue/select";
-import Button from "primevue/button";
-import Tag from "primevue/tag";
-import Dialog from "primevue/dialog";
+import Select from 'primevue/select'
+import Button from 'primevue/button'
+import Tag from 'primevue/tag'
+import Dialog from 'primevue/dialog'
 
-const toast = useToast();
+const toast = useToast()
 
-// --- MOCKS (Dados que viriam do Banco) ---
 const REPORTS_DATA = [
   {
-    id: "101",
-    student_name: "Davi Rocha",
-    class_name: "Segunda/Quarta - 09:00",
-    level: "Touca Laranja",
-    date: "2026-01-20",
+    id: 'uuid-exemplo-do-banco',
+    student_name: 'Davi Rocha',
+    class_name: 'Segunda/Quarta - 09:00',
+    level: 'Touca Laranja',
+    date: '2026-01-20',
     score: 85,
-    status: "aprovado",
-    feedback: "Davi teve uma evolução incrível na respiração lateral.",
+    status: 'aprovado',
+    feedback: 'Davi teve uma evolução incrível na respiração lateral.',
   },
   {
-    id: "102",
-    student_name: "Maria Silva",
-    class_name: "Terça/Quinta - 15:00",
-    level: "Touca Vermelha",
-    date: "2026-01-18",
+    id: '102',
+    student_name: 'Maria Silva',
+    class_name: 'Terça/Quinta - 15:00',
+    level: 'Touca Vermelha',
+    date: '2026-01-18',
     score: 60,
-    status: "manter",
-    feedback: "Precisa melhorar o batimento de pernas.",
+    status: 'manter',
+    feedback: 'Precisa melhorar o batimento de pernas.',
   },
-  {
-    id: "103",
-    student_name: "João Pedro",
-    class_name: "Segunda/Quarta - 09:00",
-    level: "Touca Laranja",
-    date: "2026-01-20",
-    score: 40,
-    status: "manter",
-    feedback: "Ainda tem medo de mergulhar a cabeça.",
-  },
-];
+]
 
 // Filtros
-const selectedStatus = ref({ name: "Todos", code: "all" });
+const selectedStatus = ref({ name: 'Todos', code: 'all' })
 const statusOptions = [
-  { name: "Todos", code: "all" },
-  { name: "Aprovados (Troca de Nível)", code: "aprovado" },
-  { name: "Manter Nível", code: "manter" },
-];
+  { name: 'Todos', code: 'all' },
+  { name: 'Aprovados (Troca de Nível)', code: 'aprovado' },
+  { name: 'Manter Nível', code: 'manter' },
+]
 
-// Estado do Modal de Detalhes
-const showDetailModal = ref(false);
-const selectedReport = ref<any>(null);
+const showDetailModal = ref(false)
+const selectedReport = ref<any>(null)
+const downloading = ref(false) // Estado de loading do download
 
 const filteredReports = computed(() => {
-  if (selectedStatus.value.code === "all") return REPORTS_DATA;
-  return REPORTS_DATA.filter((r) => r.status === selectedStatus.value.code);
-});
+  if (selectedStatus.value.code === 'all') return REPORTS_DATA
+  return REPORTS_DATA.filter((r) => r.status === selectedStatus.value.code)
+})
 
-// Ações
 function viewReport(report: any) {
-  selectedReport.value = report;
-  showDetailModal.value = true;
+  selectedReport.value = report
+  showDetailModal.value = true
 }
 
-function downloadPDF() {
+// --- INTEGRAÇÃO DE DOWNLOAD PDF ---
+async function downloadPDF() {
+  if (!selectedReport.value?.id) return
+
+  downloading.value = true
   toast.add({
-    severity: "info",
-    summary: "Download",
-    detail: "Gerando PDF do relatório...",
+    severity: 'info',
+    summary: 'Aguarde',
+    detail: 'Gerando PDF...',
     life: 2000,
-  });
+  })
+
+  try {
+    // Chama endpoint: GET /api/avaliacoes/{uuid}/pdf
+    const response = await api.get(
+      `/api/avaliacoes/${selectedReport.value.id}/pdf`,
+      {
+        responseType: 'blob', // Importante para arquivos
+      }
+    )
+
+    // Cria link invisível para download
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute(
+      'download',
+      `relatorio_${selectedReport.value.student_name}.pdf`
+    )
+    document.body.appendChild(link)
+    link.click()
+    link.remove() // Limpa
+
+    toast.add({
+      severity: 'success',
+      summary: 'Sucesso',
+      detail: 'PDF baixado!',
+      life: 3000,
+    })
+  } catch (error) {
+    console.error('Erro ao baixar PDF:', error)
+    toast.add({
+      severity: 'error',
+      summary: 'Erro',
+      detail:
+        'Não foi possível baixar o arquivo. (ID inválido ou erro no servidor)',
+      life: 4000,
+    })
+  } finally {
+    downloading.value = false
+  }
 }
 
 function sendWhatsApp() {
   toast.add({
-    severity: "success",
-    summary: "WhatsApp",
-    detail: "Link enviado para o responsável.",
+    severity: 'success',
+    summary: 'WhatsApp',
+    detail: 'Funcionalidade futura.',
     life: 2000,
-  });
+  })
 }
 
 function getScoreColor(score: number) {
-  if (score >= 80) return "bg-green-500";
-  if (score >= 60) return "bg-yellow-500";
-  return "bg-red-500";
+  if (score >= 80) return 'bg-green-500'
+  if (score >= 60) return 'bg-yellow-500'
+  return 'bg-red-500'
 }
 </script>
 
@@ -201,9 +233,6 @@ function getScoreColor(score: number) {
               :style="{ width: `${selectedReport.score}%` }"
             ></div>
           </div>
-          <p class="text-xs text-gray-400 mt-2">
-            Baseado nas respostas "SIM" do nível atual.
-          </p>
         </div>
 
         <div class="bg-blue-50 p-5 rounded-xl border border-blue-100">
@@ -219,6 +248,7 @@ function getScoreColor(score: number) {
             icon="pi pi-file-pdf"
             severity="danger"
             class="flex-1"
+            :loading="downloading"
             @click="downloadPDF"
           />
           <Button

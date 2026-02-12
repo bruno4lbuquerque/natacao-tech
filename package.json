@@ -12,6 +12,7 @@
     "@primeuix/themes": "^2.0.3",
     "@supabase/supabase-js": "^2.91.0",
     "@vueuse/core": "^14.1.0",
+    "axios": "^1.13.5",
     "pinia": "^3.0.4",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.4",

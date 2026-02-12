@@ -1,81 +1,66 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { supabase } from '@/core/services/supabase'
-import type { User, Session } from '@supabase/supabase-js'
+import api from '@/core/services/api'
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User | null>(null)
-  const session = ref<Session | null>(null)
+  const token = ref<string | null>(localStorage.getItem('token'))
+  const user = ref<string | null>(localStorage.getItem('user'))
   const loading = ref(false)
   const router = useRouter()
 
-  async function initialize() {
-    loading.value = true
-    const { data } = await supabase.auth.getSession()
-    session.value = data.session
-    user.value = data.session?.user ?? null
-
-    supabase.auth.onAuthStateChange((_event, _session) => {
-      session.value = _session
-      user.value = _session?.user ?? null
-
-      if (_event === 'SIGNED_OUT') {
-        router.push('/login')
-      }
-    })
-    loading.value = false
+  function checkAuth() {
+    const storedToken = localStorage.getItem('token')
+    if (storedToken) {
+      token.value = storedToken
+    } else {
+      token.value = null
+    }
   }
 
-  // --- ESTA É A FUNÇÃO QUE ESTAVA FALTANDO ---
   async function signIn(email: string, pass: string) {
     loading.value = true
 
-    // LOGIN MOCK (Teste instantâneo sem Supabase)
-    if (email === 'admin@acquakids.com' && pass === '123456') {
-      console.warn('⚠️ Login via MOCK (Modo de Teste)')
-      const mockUser: any = { id: 'mock-id', email: email }
-
-      // Atualiza o estado
-      user.value = mockUser
-      session.value = { access_token: 'mock-token', user: mockUser } as any
-
-      loading.value = false
-      return { success: true }
-    }
-
     try {
-      // Tenta login REAL no Supabase
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
+      const response = await api.post('/auth/login', {
+        login: email,
         password: pass,
       })
 
-      if (error) throw error
+      const tokenRecebido = response.data.token
 
-      session.value = data.session
-      user.value = data.user
+      localStorage.setItem('token', tokenRecebido)
+      localStorage.setItem('user', email)
+      token.value = tokenRecebido
+      user.value = email
 
       return { success: true }
     } catch (error: any) {
-      return { success: false, error: error.message }
+      console.error('Erro no login:', error)
+      const msg =
+        error.response?.status === 403
+          ? 'Usuário ou senha inválidos'
+          : 'Erro ao conectar com o servidor'
+
+      return { success: false, error: msg }
     } finally {
       loading.value = false
     }
   }
 
-  async function signOut() {
-    await supabase.auth.signOut()
+  function signOut() {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    token.value = null
     user.value = null
-    session.value = null
     router.push('/login')
   }
 
   return {
     user,
-    session,
+    token,
     loading,
-    initialize,
+    checkAuth,
     signIn,
     signOut,
   }

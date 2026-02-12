@@ -43,26 +43,21 @@ const router = createRouter({
   ],
 })
 
-// --- GUARDA DE ROTAS OTIMIZADO ---
-router.beforeEach(async (to, _from, next) => {
-  const authStore = useAuthStore() // Acessa a memória local
+router.beforeEach((to, _from, next) => {
+  const authStore = useAuthStore()
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
 
-  // Se o usuário não estiver carregado, tenta inicializar uma vez
-  if (requiresAuth && !authStore.session && !authStore.loading) {
-    await authStore.initialize()
+  if (!authStore.token) {
+    authStore.checkAuth()
   }
 
-  const isAuthenticated = !!authStore.session
+  const isAuthenticated = !!authStore.token
 
   if (requiresAuth && !isAuthenticated) {
-    // Se precisa de login e não tem sessão, manda pro Login
     next('/login')
   } else if (to.path === '/login' && isAuthenticated) {
-    // Se já tá logado e tenta ir pro login, manda pra Dashboard
     next('/')
   } else {
-    // Segue o fluxo normal
     next()
   }
 })
