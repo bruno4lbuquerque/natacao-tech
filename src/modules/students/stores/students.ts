@@ -11,7 +11,7 @@ export const useStudentsStore = defineStore('students', () => {
     loading.value = true
     try {
       const response = await api.get('/api/alunos')
-      students.value = mapJavaAlunosToFront(response.data)
+      students.value = response.data
     } catch (error) {
       console.error('Erro ao buscar alunos:', error)
     } finally {
@@ -23,7 +23,16 @@ export const useStudentsStore = defineStore('students', () => {
     loading.value = true
     try {
       const response = await api.get(`/api/turmas/${turmaUuid}/alunos`)
-      students.value = mapJavaAlunosToFront(response.data)
+
+      students.value = response.data.map((aluno: any) => ({
+        uuid: aluno.uuid,
+        nome: aluno.nome,
+        nivelAtual: aluno.nivel,
+        corTouca: aluno.corTouca,
+        nomeTurma: 'N/A',
+        nomeAcademia: 'N/A',
+        ativo: true,
+      }))
     } catch (error) {
       console.error('Erro ao buscar alunos da turma:', error)
       students.value = []
@@ -43,16 +52,6 @@ export const useStudentsStore = defineStore('students', () => {
       console.error('Erro ao transferir aluno:', error)
       return { success: false, error }
     }
-  }
-
-  function mapJavaAlunosToFront(data: any[]): AlunoDTO[] {
-    return data.map((aluno: any) => ({
-      id: aluno.uuid,
-      name: aluno.nome,
-      class_code: aluno.nomeTurma || 'Sem Turma',
-      level: aluno.corTouca || 'N/A',
-      active: true,
-    }))
   }
 
   return {

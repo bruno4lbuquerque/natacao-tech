@@ -58,7 +58,8 @@ async function startEvaluation() {
 
   // Inicializa o objeto de avaliação para CADA aluno encontrado
   studentsStore.students.forEach((student: any) => {
-    evaluationData.value[student.id] = {
+    // CORREÇÃO: id -> uuid
+    evaluationData.value[student.uuid] = {
       approvedSkills: [],
       feedback: '',
       promoted: false,
@@ -74,8 +75,7 @@ async function finish() {
 
   // Converte o Objeto em Lista para enviar ao Java
   const list = Object.keys(evaluationData.value).map((studentId) => ({
-    studentId,
-    // O sinal ! diz ao TS: "Eu garanto que existe porque peguei a chave do próprio objeto"
+    studentId, // Aqui studentId já é o UUID pois usamos ele como chave acima
     ...evaluationData.value[studentId]!,
   }))
 
@@ -131,12 +131,12 @@ async function finish() {
       <Accordion multiple>
         <AccordionPanel
           v-for="student in studentsStore.students"
-          :key="student.id"
-          :value="student.id"
+          :key="student.uuid"
+          :value="student.uuid"
         >
-          <AccordionHeader>{{ student.name }}</AccordionHeader>
+          <AccordionHeader>{{ student.nome }}</AccordionHeader>
           <AccordionContent>
-            <div v-if="evaluationData[student.id]" class="space-y-4">
+            <div v-if="evaluationData[student.uuid]" class="space-y-4">
               <h3 class="font-bold text-gray-700 text-sm">
                 Habilidades (Marque se aprovado):
               </h3>
@@ -148,12 +148,12 @@ async function finish() {
                   class="flex items-center gap-2"
                 >
                   <Checkbox
-                    v-model="evaluationData[student.id]!.approvedSkills"
+                    v-model="evaluationData[student.uuid]!.approvedSkills"
                     :value="skill.uuid"
-                    :inputId="`${student.id}-${skill.uuid}`"
+                    :inputId="`${student.uuid}-${skill.uuid}`"
                   />
                   <label
-                    :for="`${student.id}-${skill.uuid}`"
+                    :for="`${student.uuid}-${skill.uuid}`"
                     class="text-sm text-gray-600 cursor-pointer"
                   >
                     {{ skill.descricao }}
@@ -168,7 +168,7 @@ async function finish() {
                   Feedback / Observações
                 </label>
                 <Textarea
-                  v-model="evaluationData[student.id]!.feedback"
+                  v-model="evaluationData[student.uuid]!.feedback"
                   rows="3"
                   placeholder="Escreva como foi o desempenho do aluno..."
                   class="w-full"
@@ -179,7 +179,7 @@ async function finish() {
                 class="flex items-center gap-2 mt-2 bg-green-50 p-3 rounded-lg border border-green-100"
               >
                 <Checkbox
-                  v-model="evaluationData[student.id]!.promoted"
+                  v-model="evaluationData[student.uuid]!.promoted"
                   :binary="true"
                 />
                 <span class="text-sm font-bold text-green-700">

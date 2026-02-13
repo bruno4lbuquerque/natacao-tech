@@ -1,28 +1,29 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/core/services/api'
+import type { HabilidadeDTO } from '@/core/types/api'
 
 export const useAssessmentsStore = defineStore('assessments', () => {
+  const skills = ref<HabilidadeDTO[]>([])
   const loading = ref(false)
-  const skills = ref<any[]>([])
 
-  async function fetchSkills(nivelId: string) {
+  async function fetchSkills(nivelUuid: string) {
     loading.value = true
     try {
-      const res = await api.get(`/api/niveis/${nivelId}/habilidades`)
-      skills.value = res.data
-    } catch (err) {
-      console.error(err)
+      const response = await api.get(`/api/niveis/${nivelUuid}/habilidades`)
+      skills.value = response.data
+    } catch (error) {
+      console.error('Erro ao buscar habilidades:', error)
+      skills.value = []
     } finally {
       loading.value = false
     }
   }
 
-  async function submitEvaluation(turmaId: string, evaluations: any[]) {
+  async function submitEvaluation(turmaUuid: string, evaluations: any[]) {
     loading.value = true
     try {
       const payload = {
-        turmaId: turmaId,
         avaliacoes: evaluations.map((ev) => ({
           alunoId: ev.studentId,
           habilidadesAprovadasIds: ev.approvedSkills,
@@ -32,13 +33,20 @@ export const useAssessmentsStore = defineStore('assessments', () => {
       }
 
       await api.post('/api/avaliacoes/lote', payload)
+
       return { success: true }
     } catch (error) {
+      console.error('Erro ao enviar avaliação:', error)
       return { success: false, error }
     } finally {
       loading.value = false
     }
   }
 
-  return { loading, skills, fetchSkills, submitEvaluation }
+  return {
+    skills,
+    loading,
+    fetchSkills,
+    submitEvaluation,
+  }
 })

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/core/services/api'
-import type { TurmaDTO } from '@/core/types/api'
+import type { TurmaDTO, CadastroTurmaDTO } from '@/core/types/api'
 
 export const useClassesStore = defineStore('classes', () => {
   const classes = ref<TurmaDTO[]>([])
@@ -19,5 +19,24 @@ export const useClassesStore = defineStore('classes', () => {
     }
   }
 
-  return { classes, loading, fetchClasses }
+  async function createClass(payload: CadastroTurmaDTO) {
+    loading.value = true
+    try {
+      await api.post('/api/turmas', payload)
+      await fetchClasses()
+      return { success: true }
+    } catch (error) {
+      console.error('Erro ao criar turma:', error)
+      return { success: false, error }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return {
+    classes,
+    loading,
+    fetchClasses,
+    createClass,
+  }
 })

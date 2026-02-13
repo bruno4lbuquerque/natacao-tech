@@ -1,95 +1,106 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { supabase } from '@/core/services/supabase'
+import { useAuthStore } from '@/core/stores/auth'
 
-const isMobileOpen = ref(false)
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 const menuItems = [
   { label: 'Dashboard', icon: 'pi pi-home', route: '/' },
-  { label: 'Avaliações', icon: 'pi pi-check-circle', route: '/assessments' },
-  // { label: "Turmas", icon: "pi pi-calendar", route: "/classes" }, // <--- OCULTO PARA A REUNIÃO
+  { label: 'Turmas', icon: 'pi pi-calendar', route: '/classes' },
   { label: 'Alunos', icon: 'pi pi-users', route: '/students' },
+  { label: 'Avaliações', icon: 'pi pi-check-square', route: '/assessments' },
+  // { label: 'Chamada', icon: 'pi pi-list', route: '/attendance' }, <--- REMOVIDO TEMPORARIAMENTE (Falta Backend)
   { label: 'Relatórios', icon: 'pi pi-chart-bar', route: '/reports' },
 ]
 
 function navigate(path: string) {
   router.push(path)
-  isMobileOpen.value = false
 }
 
-async function handleLogout() {
-  await supabase.auth.signOut()
+function logout() {
+  authStore.signOut()
   router.push('/login')
 }
 </script>
 
 <template>
-  <button
-    class="lg:hidden fixed top-3 left-3 z-[60] p-3 bg-white text-gray-700 rounded-md shadow-lg border border-gray-200 hover:bg-gray-50 flex items-center justify-center transition-all active:scale-95"
-    @click="isMobileOpen = !isMobileOpen"
-    aria-label="Menu"
-  >
-    <i class="pi pi-bars text-xl"></i>
-  </button>
-
-  <div
-    v-if="isMobileOpen"
-    class="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
-    @click="isMobileOpen = false"
-  ></div>
-
-  <aside
-    :class="[
-      'fixed top-0 left-0 h-screen bg-white border-r border-gray-100 z-50 transition-transform duration-300 w-64 flex flex-col',
-      isMobileOpen
-        ? 'translate-x-0 shadow-2xl'
-        : '-translate-x-full lg:translate-x-0',
-    ]"
+  <nav
+    class="h-full w-full bg-white flex flex-col transition-all duration-300 border-r border-slate-100"
   >
     <div
-      class="h-36 flex items-center justify-center border-b border-gray-50 p-4"
+      class="h-24 flex items-center gap-3 px-6 shrink-0 border-b border-slate-50"
     >
       <img
         src="/images/acquOnwhite.jpeg"
         alt="AcquOn Logo"
-        class="max-h-full w-auto object-contain"
+        class="w-12 h-12 rounded-xl shadow-sm object-cover"
       />
+
+      <div class="flex flex-col justify-center">
+        <span
+          class="font-bold text-xl tracking-tight text-slate-800 leading-tight"
+          >AcquOn</span
+        >
+        <span
+          class="text-[10px] uppercase font-bold text-sky-500 tracking-widest"
+          >Gestão Inteligente</span
+        >
+      </div>
     </div>
-    <nav class="flex-1 overflow-y-auto py-6 px-4 space-y-2">
+
+    <div class="flex-1 overflow-y-auto py-6 px-4 space-y-2">
+      <p
+        class="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mb-2"
+      >
+        Menu Principal
+      </p>
+
       <a
         v-for="item in menuItems"
         :key="item.route"
         @click="navigate(item.route)"
-        class="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all duration-200 group font-medium"
-        :class="
-          route.path === item.route
-            ? 'bg-brand-50 text-brand-600 shadow-sm'
-            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-        "
+        class="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all duration-200 font-medium group relative overflow-hidden"
+        :class="{
+          'bg-sky-50 text-sky-700 shadow-sm ring-1 ring-sky-100':
+            route.path === item.route,
+          'text-slate-500 hover:bg-slate-50 hover:text-slate-900':
+            route.path !== item.route,
+        }"
       >
+        <div
+          v-if="route.path === item.route"
+          class="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-1 bg-sky-500 rounded-r-full"
+        ></div>
         <i
           :class="[
             item.icon,
+            'text-lg transition-transform group-hover:scale-110 duration-200',
             route.path === item.route
-              ? 'text-brand-500'
-              : 'text-gray-400 group-hover:text-gray-600',
+              ? 'text-sky-600'
+              : 'text-slate-400 group-hover:text-slate-600',
           ]"
         ></i>
         <span>{{ item.label }}</span>
       </a>
-    </nav>
+    </div>
 
-    <div class="p-4 border-t border-gray-50">
+    <div class="p-4 border-t border-slate-50 shrink-0">
       <button
-        @click="handleLogout"
-        class="flex items-center gap-3 w-full px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors text-sm font-medium"
+        @click="logout"
+        class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-red-50 hover:text-red-600 hover:shadow-sm transition-all duration-200 group"
       >
-        <i class="pi pi-sign-out"></i>
-        <span>Sair do Sistema</span>
+        <div
+          class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-red-100 transition-colors"
+        >
+          <i class="pi pi-sign-out text-sm"></i>
+        </div>
+        <div class="flex flex-col items-start">
+          <span class="font-bold text-sm">Sair</span>
+          <span class="text-xs opacity-70">Encerrar sessão</span>
+        </div>
       </button>
     </div>
-  </aside>
+  </nav>
 </template>

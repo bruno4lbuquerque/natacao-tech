@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
-import api from '@/core/services/api' // Importando API para cadastro
+import api from '@/core/services/api'
 
 import { useStudentsStore } from '@/modules/students/stores/students'
 import { useClassesStore } from '@/modules/classes/stores/classes'
@@ -23,7 +23,6 @@ const levelsStore = useLevelsStore()
 const selectedClass = ref<any>(null)
 const searchQuery = ref('')
 
-// Controle do Modal de Cadastro
 const showCreateModal = ref(false)
 const createLoading = ref(false)
 const newStudent = ref({
@@ -62,20 +61,21 @@ const formClassOptions = computed(() =>
 const levelOptions = computed(() => {
   return levelsStore.levels.map((l) => ({
     name: l.nome,
-    code: l.id,
+    code: l.uuid,
   }))
 })
 
 const filteredStudents = computed(() => {
   return studentsStore.students.filter((student: any) => {
-    const matchesSearch = student.name
+    const matchesSearch = student.nome
       .toLowerCase()
       .includes(searchQuery.value.toLowerCase())
 
     const matchesClass =
       !selectedClass.value ||
       selectedClass.value.code === 'all' ||
-      student.class_code.includes(selectedClass.value.name.split(' - ')[0])
+      (student.nomeTurma &&
+        student.nomeTurma.includes(selectedClass.value.name.split(' - ')[0]))
 
     return matchesSearch && matchesClass
   })
@@ -99,7 +99,7 @@ async function saveMove() {
   if (!targetClass.value || !studentToMove.value) return
 
   const result = await studentsStore.transferStudent(
-    studentToMove.value.id,
+    studentToMove.value.uuid,
     targetClass.value.code
   )
 
@@ -122,7 +122,6 @@ async function saveMove() {
 }
 
 function openCreateModal() {
-  // Limpa o formulário
   newStudent.value = {
     nome: '',
     dataNascimento: null,
@@ -221,21 +220,23 @@ async function createStudent() {
     <div v-else class="grid grid-cols-1 gap-4">
       <div
         v-for="student in filteredStudents"
-        :key="student.id"
+        :key="student.uuid"
         class="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"
       >
         <div class="flex items-center gap-4">
           <div
             class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold"
           >
-            {{ student.name.charAt(0) }}
+            {{ student.nome.charAt(0) }}
           </div>
           <div>
-            <h3 class="font-bold text-gray-800">{{ student.name }}</h3>
+            <h3 class="font-bold text-gray-800">{{ student.nome }}</h3>
             <div class="flex gap-2 text-sm text-gray-500">
-              <span>{{ student.class_code }}</span>
+              <span>{{ student.nomeTurma || 'Sem Turma' }}</span>
               <span>•</span>
-              <span class="capitalize">{{ getLevelName(student.level) }}</span>
+              <span class="capitalize">{{
+                getLevelName(student.nivelAtual)
+              }}</span>
             </div>
           </div>
         </div>

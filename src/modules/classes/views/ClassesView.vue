@@ -1,256 +1,310 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
+import api from '@/core/services/api'
 
-// Componentes
+import { useClassesStore } from '@/modules/classes/stores/classes'
+import { useLevelsStore } from '@/modules/levels/stores/levels'
+import { formatDays } from '@/core/utils/formatters'
+
 import Button from 'primevue/button'
-import IconField from 'primevue/iconfield'
-import InputIcon from 'primevue/inputicon'
 import InputText from 'primevue/inputtext'
-import Tag from 'primevue/tag'
 import Dialog from 'primevue/dialog'
-import Avatar from 'primevue/avatar'
-import AvatarGroup from 'primevue/avatargroup'
+import Tag from 'primevue/tag'
+import MultiSelect from 'primevue/multiselect'
+import Dropdown from 'primevue/dropdown'
+import Calendar from 'primevue/calendar'
 
 const toast = useToast()
+const classesStore = useClassesStore()
+const levelsStore = useLevelsStore()
 
-// --- MOCKS (Turmas com lista de alunos interna) ---
-const CLASSES_DATA = [
-  {
-    id: 1,
-    name: 'Segunda e Quarta - 09:00',
-    level: 'Acqua Aprendizado',
-    color: 'bg-orange-100 text-orange-700',
-    icon: 'pi-star',
-    students: [
-      { id: 1, name: 'Davi Rocha', status: 'ativo' },
-      { id: 2, name: 'João Pedro', status: 'inativo' },
-      { id: 3, name: 'Beatriz Lima', status: 'ativo' },
-    ],
-  },
-  {
-    id: 2,
-    name: 'Terça e Quinta - 15:00',
-    level: 'Acqua Iniciante',
-    color: 'bg-red-100 text-red-700',
-    icon: 'pi-heart',
-    students: [
-      { id: 4, name: 'Maria Silva', status: 'ativo' },
-      { id: 5, name: 'Lucas Souza', status: 'ativo' },
-      { id: 6, name: 'Ana Clara', status: 'ativo' },
-      { id: 7, name: 'Pedro Henrique', status: 'ativo' },
-      { id: 8, name: 'Julia Costa', status: 'ativo' },
-    ],
-  },
-  {
-    id: 3,
-    name: 'Sábado - 10:00',
-    level: 'Acqua Baby',
-    color: 'bg-blue-100 text-blue-700',
-    icon: 'pi-user',
-    students: [
-      { id: 9, name: 'Enzo Gabriel', status: 'ativo' },
-      { id: 10, name: 'Valentina', status: 'ativo' },
-    ],
-  },
-  {
-    id: 4,
-    name: 'Segunda e Quarta - 18:00',
-    level: 'Acqua Expert',
-    color: 'bg-gray-800 text-white',
-    icon: 'pi-bolt',
-    students: [], // Turma vazia para teste
-  },
+const showCreateModal = ref(false)
+const submitting = ref(false)
+const searchQuery = ref('')
+const academias = ref<any[]>([])
+
+const form = ref({
+  nome: '',
+  horario: null as Date | null,
+  diasSemana: [] as string[],
+  nivelAlvoId: '',
+  academiaId: '',
+})
+
+const weekDays = [
+  { label: 'Segunda-feira', value: 'SEGUNDA' },
+  { label: 'Terça-feira', value: 'TERCA' },
+  { label: 'Quarta-feira', value: 'QUARTA' },
+  { label: 'Quinta-feira', value: 'QUINTA' },
+  { label: 'Sexta-feira', value: 'SEXTA' },
+  { label: 'Sábado', value: 'SABADO' },
 ]
 
-// Estados
-const searchQuery = ref('')
-const showClassDetails = ref(false)
-const selectedClass = ref<any>(null)
+onMounted(async () => {
+  await Promise.all([
+    classesStore.fetchClasses(),
+    levelsStore.fetchLevels(),
+    fetchAcademias(),
+  ])
+})
 
-// Filtro
+async function fetchAcademias() {
+  try {
+    const res = await api.get('/api/academias')
+    academias.value = res.data
+    if (academias.value.length > 0) {
+      form.value.academiaId = academias.value[0].uuid
+    }
+  } catch (e) {
+    console.error('Erro ao buscar academias', e)
+  }
+}
+
 const filteredClasses = computed(() => {
-  return CLASSES_DATA.filter(
+  if (!searchQuery.value) return classesStore.classes
+
+  const lower = searchQuery.value.toLowerCase()
+  return classesStore.classes.filter(
     (c) =>
-      c.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      c.level.toLowerCase().includes(searchQuery.value.toLowerCase())
+      c.nome.toLowerCase().includes(lower) ||
+      (c.nivelAlvo?.nome && c.nivelAlvo.nome.toLowerCase().includes(lower))
   )
 })
 
-// Ações
-function openClassDetails(turma: any) {
-  selectedClass.value = turma
-  showClassDetails.value = true
+const levelOptions = computed(() =>
+  levelsStore.levels.map((l) => ({
+    label: l.nome,
+    value: l.uuid,
+  }))
+)
+
+const academiaOptions = computed(() =>
+  academias.value.map((a) => ({
+    label: a.nome,
+    value: a.uuid,
+  }))
+)
+
+function openCreateModal() {
+  form.value = {
+    nome: '',
+    horario: null,
+    diasSemana: [],
+    nivelAlvoId: '',
+    academiaId: academias.value[0]?.uuid || '',
+  }
+  showCreateModal.value = true
 }
 
-function handleEditClass() {
-  toast.add({
-    severity: 'info',
-    summary: 'Em Breve',
-    detail: 'Edição de turma será implementada.',
-    life: 2000,
-  })
+async function saveClass() {
+  if (
+    !form.value.nome ||
+    !form.value.horario ||
+    form.value.diasSemana.length === 0 ||
+    !form.value.nivelAlvoId
+  ) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Atenção',
+      detail: 'Preencha todos os campos obrigatórios.',
+    })
+    return
+  }
+
+  submitting.value = true
+
+  try {
+    const timeString = form.value.horario.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+
+    const payload = {
+      nome: form.value.nome,
+      horario: timeString,
+      diasSemana: form.value.diasSemana,
+      nivelAlvoId: form.value.nivelAlvoId,
+      academiaId: form.value.academiaId,
+    }
+
+    const res = await classesStore.createClass(payload)
+
+    if (res.success) {
+      toast.add({
+        severity: 'success',
+        summary: 'Sucesso',
+        detail: 'Turma criada!',
+      })
+      showCreateModal.value = false
+    } else {
+      throw new Error('Falha na criação')
+    }
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'Erro',
+      detail: 'Não foi possível criar a turma.',
+    })
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto space-y-6">
-    <div
-      class="flex flex-col md:flex-row md:items-center justify-between gap-4"
-    >
+  <div class="max-w-6xl mx-auto p-4 space-y-6">
+    <div class="flex flex-col md:flex-row justify-between items-center gap-4">
       <div>
-        <h1 class="text-3xl font-bold text-gray-800 tracking-tight">
-          Minhas Turmas
-        </h1>
-        <p class="text-gray-500">
-          Gerencie horários e visualize os alunos matriculados.
-        </p>
+        <h1 class="text-3xl font-bold text-gray-800">Minhas Turmas</h1>
+        <p class="text-gray-500">Gerencie horários e níveis.</p>
       </div>
-      <Button
-        label="Nova Turma"
-        icon="pi pi-plus"
-        class="font-bold bg-brand-600 border-brand-600 shadow-md hover:shadow-lg transition-all"
-      />
+      <div class="flex gap-2 w-full md:w-auto">
+        <span class="p-input-icon-left w-full md:w-64">
+          <i class="pi pi-search" />
+          <InputText
+            v-model="searchQuery"
+            placeholder="Buscar turma..."
+            class="w-full"
+          />
+        </span>
+        <Button label="Nova Turma" icon="pi pi-plus" @click="openCreateModal" />
+      </div>
     </div>
 
-    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-      <IconField iconPosition="left" class="w-full">
-        <InputIcon class="pi pi-search" />
-        <InputText
-          v-model="searchQuery"
-          placeholder="Pesquisar por horário ou nível..."
-          class="w-full border-none shadow-none focus:ring-0"
-        />
-      </IconField>
+    <div v-if="classesStore.loading" class="text-center py-10">
+      <i class="pi pi-spin pi-spinner text-4xl text-sky-500"></i>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+    <div
+      v-else-if="filteredClasses.length === 0"
+      class="text-center py-12 bg-white rounded-xl border border-gray-100"
+    >
+      <p class="text-gray-500">Nenhuma turma encontrada.</p>
+    </div>
+
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div
         v-for="turma in filteredClasses"
-        :key="turma.id"
-        class="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-all duration-300 cursor-pointer group relative overflow-hidden"
-        @click="openClassDetails(turma)"
+        :key="turma.uuid"
+        class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all group"
       >
-        <div
-          class="absolute top-0 left-0 w-full h-1"
-          :class="turma.color.replace('text-', 'bg-').split(' ')[0]"
-        ></div>
-
         <div class="flex justify-between items-start mb-4">
-          <div class="p-3 rounded-xl" :class="turma.color">
-            <i class="pi" :class="turma.icon"></i>
-          </div>
           <div
-            class="px-3 py-1 bg-gray-50 rounded-full text-xs font-bold text-gray-500 border border-gray-100"
+            class="w-12 h-12 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 font-bold text-lg group-hover:bg-sky-600 group-hover:text-white transition-colors"
           >
-            {{ turma.students.length }} Alunos
+            {{ turma.nome.charAt(0).toUpperCase() }}
           </div>
+          <Tag :value="turma.nivelAlvo?.nome || 'Multinível'" severity="info" />
         </div>
 
-        <h3
-          class="text-xl font-bold text-gray-800 mb-1 group-hover:text-brand-600 transition-colors"
-        >
-          {{ turma.name }}
-        </h3>
-        <p class="text-sm text-gray-500 mb-6">{{ turma.level }}</p>
+        <h3 class="font-bold text-lg text-gray-800 mb-1">{{ turma.nome }}</h3>
 
-        <div
-          class="flex items-center justify-between pt-4 border-t border-gray-50"
-        >
-          <AvatarGroup v-if="turma.students.length > 0">
-            <Avatar
-              v-for="student in turma.students.slice(0, 3)"
-              :key="student.id"
-              :label="student.name.substring(0, 1)"
-              shape="circle"
-              class="border-2 border-white bg-gray-200 text-gray-600 text-xs font-bold"
-            />
-            <Avatar
-              v-if="turma.students.length > 3"
-              :label="`+${turma.students.length - 3}`"
-              shape="circle"
-              class="border-2 border-white bg-gray-100 text-xs"
-            />
-          </AvatarGroup>
-          <span v-else class="text-xs text-gray-400 italic">Nenhum aluno</span>
-
-          <i
-            class="pi pi-arrow-right text-gray-300 group-hover:text-brand-500 group-hover:translate-x-1 transition-all"
-          ></i>
+        <div class="flex items-center gap-2 text-gray-500 text-sm mb-4">
+          <i class="pi pi-clock"></i>
+          <span>{{ turma.horario.substring(0, 5) }}</span>
         </div>
-      </div>
-    </div>
 
-    <Dialog
-      v-model:visible="showClassDetails"
-      modal
-      :header="selectedClass?.name"
-      :style="{ width: '90vw', maxWidth: '500px' }"
-    >
-      <div v-if="selectedClass" class="space-y-6">
+        <div class="flex flex-wrap gap-1 mb-4">
+          <span
+            v-for="day in formatDays(turma.diasSemana)"
+            :key="day"
+            class="text-[10px] uppercase font-bold px-2 py-1 bg-gray-50 text-gray-600 rounded"
+          >
+            {{ day }}
+          </span>
+        </div>
+
         <div
-          class="bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-center justify-between"
+          class="pt-4 border-t border-gray-50 flex justify-between items-center"
         >
-          <div>
-            <span
-              class="text-xs font-bold text-gray-400 uppercase tracking-widest"
-              >Metodologia</span
-            >
-            <p class="font-bold text-gray-800">{{ selectedClass.level }}</p>
-          </div>
+          <span class="text-xs text-gray-400 font-medium">
+            <i class="pi pi-building mr-1"></i>
+            {{ turma.nomeProfessor || 'Sua Turma' }}
+          </span>
           <Button
             icon="pi pi-pencil"
             text
             rounded
             severity="secondary"
-            @click="handleEditClass"
-            v-tooltip="'Editar Turma'"
+            aria-label="Editar"
           />
         </div>
+      </div>
+    </div>
 
-        <div>
-          <h4 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <i class="pi pi-users text-brand-500"></i> Lista de Alunos
-          </h4>
+    <Dialog
+      v-model:visible="showCreateModal"
+      modal
+      header="Nova Turma"
+      :style="{ width: '30rem' }"
+    >
+      <div class="flex flex-col gap-4 pt-2">
+        <div class="flex flex-col gap-2">
+          <label class="font-bold text-sm text-gray-700">Nome da Turma</label>
+          <InputText v-model="form.nome" placeholder="Ex: Baby Manhã A" />
+        </div>
 
-          <div class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-            <div
-              v-for="student in selectedClass.students"
-              :key="student.id"
-              class="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors"
-            >
-              <div class="flex items-center gap-3">
-                <Avatar
-                  :label="student.name.substring(0, 2)"
-                  shape="circle"
-                  class="bg-white border border-gray-200 text-gray-600 font-bold"
-                />
-                <span class="text-sm font-medium text-gray-700">{{
-                  student.name
-                }}</span>
-              </div>
-              <Tag
-                :severity="student.status === 'ativo' ? 'success' : 'danger'"
-                :value="student.status"
-                class="text-[10px]"
-              />
-            </div>
-
-            <div
-              v-if="selectedClass.students.length === 0"
-              class="text-center py-8 text-gray-400"
-            >
-              <i class="pi pi-inbox text-2xl mb-2"></i>
-              <p class="text-sm">Esta turma ainda não tem alunos.</p>
-            </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="flex flex-col gap-2">
+            <label class="font-bold text-sm text-gray-700">Horário</label>
+            <Calendar
+              v-model="form.horario"
+              timeOnly
+              hourFormat="24"
+              placeholder="00:00"
+            />
+          </div>
+          <div class="flex flex-col gap-2">
+            <label class="font-bold text-sm text-gray-700">Nível Alvo</label>
+            <Dropdown
+              v-model="form.nivelAlvoId"
+              :options="levelOptions"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Selecione"
+              class="w-full"
+            />
           </div>
         </div>
 
-        <div class="flex justify-end pt-2">
+        <div class="flex flex-col gap-2">
+          <label class="font-bold text-sm text-gray-700">Dias da Semana</label>
+          <MultiSelect
+            v-model="form.diasSemana"
+            :options="weekDays"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Selecione os dias"
+            display="chip"
+            class="w-full"
+          />
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <label class="font-bold text-sm text-gray-700"
+            >Unidade (Academia)</label
+          >
+          <Dropdown
+            v-model="form.academiaId"
+            :options="academiaOptions"
+            optionLabel="label"
+            optionValue="value"
+            class="w-full"
+          />
+        </div>
+
+        <div class="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
           <Button
-            label="Fechar"
+            label="Cancelar"
             severity="secondary"
-            @click="showClassDetails = false"
+            @click="showCreateModal = false"
+          />
+          <Button
+            label="Criar Turma"
+            icon="pi pi-check"
+            @click="saveClass"
+            :loading="submitting"
           />
         </div>
       </div>

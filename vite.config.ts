@@ -1,29 +1,31 @@
-import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
-import { VitePWA } from "vite-plugin-pwa";
-import path from "path";
+import { fileURLToPath, URL } from 'node:url'
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
     vue(),
     VitePWA({
-      registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "apple-touch-icon.png", "masked-icon.svg"],
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: "Acqua Kids Expert",
-        short_name: "AcquaKids",
-        description: "Sistema de Gestão de Natação",
-        theme_color: "#0ea5e9",
+        name: 'Connect Acqua Kids',
+        short_name: 'Acqua Kids',
+        description: 'Sistema de Gestão de Natação',
+        theme_color: '#0ea5e9',
+        background_color: '#ffffff',
+        display: 'standalone',
         icons: [
           {
-            src: "pwa-192x192.png",
-            sizes: "192x192",
-            type: "image/png",
+            src: '/pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
           },
           {
-            src: "pwa-512x512.png",
-            sizes: "512x512",
-            type: "image/png",
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
           },
         ],
       },
@@ -31,7 +33,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-});
+})
