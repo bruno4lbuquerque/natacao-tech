@@ -25,9 +25,29 @@ export const useClassesStore = defineStore('classes', () => {
       await api.post('/api/turmas', payload)
       await fetchClasses()
       return { success: true }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar turma:', error)
-      return { success: false, error }
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Erro desconhecido',
+      }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function deleteClass(uuid: string) {
+    loading.value = true
+    try {
+      await api.delete(`/api/turmas/${uuid}`)
+      classes.value = classes.value.filter((t) => t.uuid !== uuid)
+      return { success: true }
+    } catch (error: any) {
+      console.error('Erro ao excluir turma:', error)
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Erro ao excluir',
+      }
     } finally {
       loading.value = false
     }
@@ -38,5 +58,6 @@ export const useClassesStore = defineStore('classes', () => {
     loading,
     fetchClasses,
     createClass,
+    deleteClass,
   }
 })

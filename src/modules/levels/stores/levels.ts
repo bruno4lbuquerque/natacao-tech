@@ -19,5 +19,9 @@ export const useLevelsStore = defineStore('levels', () => {
     }
   }
 
-  return { levels, loading, fetchLevels }
+  return {
+    levels,
+    loading,
+    fetchLevels,
+  }
 })

@@ -13,7 +13,7 @@ import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import InputText from 'primevue/inputtext'
 import Dialog from 'primevue/dialog'
-import Calendar from 'primevue/calendar'
+import DatePicker from 'primevue/datepicker'
 
 const toast = useToast()
 const studentsStore = useStudentsStore()
@@ -142,7 +142,7 @@ async function createStudent() {
     toast.add({
       severity: 'warn',
       summary: 'Atenção',
-      detail: 'Preencha os campos obrigatórios.',
+      detail: 'Preencha os campos obrigatórios (*).',
     })
     return
   }
@@ -266,7 +266,7 @@ async function createStudent() {
     >
       <div class="flex flex-col gap-4 pt-4">
         <p class="text-sm text-gray-600">
-          Selecione a nova turma para <strong>{{ studentToMove?.name }}</strong
+          Selecione a nova turma para <strong>{{ studentToMove?.nome }}</strong
           >.
         </p>
         <div class="flex flex-col gap-2">
@@ -304,7 +304,7 @@ async function createStudent() {
 
         <div class="flex flex-col gap-2">
           <label class="font-bold text-sm">Data de Nascimento *</label>
-          <Calendar
+          <DatePicker
             v-model="newStudent.dataNascimento"
             dateFormat="dd/mm/yy"
             showIcon

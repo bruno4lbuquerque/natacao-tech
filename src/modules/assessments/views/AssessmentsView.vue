@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useClassesStore } from '@/modules/classes/stores/classes'
 import { useStudentsStore } from '@/modules/students/stores/students'
@@ -14,7 +15,9 @@ import Accordion from 'primevue/accordion'
 import AccordionPanel from 'primevue/accordionpanel'
 import AccordionHeader from 'primevue/accordionheader'
 import AccordionContent from 'primevue/accordioncontent'
+import Card from 'primevue/card'
 
+const router = useRouter()
 const toast = useToast()
 const classesStore = useClassesStore()
 const studentsStore = useStudentsStore()
@@ -23,7 +26,6 @@ const assessStore = useAssessmentsStore()
 const selectedClass = ref<any>(null)
 const step = ref(1)
 
-// Define a estrutura dos dados da avaliação
 interface EvaluationData {
   approvedSkills: string[]
   feedback: string
@@ -32,7 +34,6 @@ interface EvaluationData {
 
 const evaluationData = ref<Record<string, EvaluationData>>({})
 
-// Carrega as turmas ao iniciar
 classesStore.fetchClasses()
 
 const classOptions = computed(() =>
@@ -44,21 +45,15 @@ const classOptions = computed(() =>
 
 async function startEvaluation() {
   const turma = selectedClass.value
-
-  // Verificação de segurança
   if (!turma || !turma.uuid) return
 
-  // Busca alunos
   await studentsStore.fetchStudentsByClass(turma.uuid)
 
-  // Busca habilidades se tiver nível alvo
   if (turma.nivelAlvo?.uuid) {
     await assessStore.fetchSkills(turma.nivelAlvo.uuid)
   }
 
-  // Inicializa o objeto de avaliação para CADA aluno encontrado
   studentsStore.students.forEach((student: any) => {
-    // CORREÇÃO: id -> uuid
     evaluationData.value[student.uuid] = {
       approvedSkills: [],
       feedback: '',
@@ -69,13 +64,12 @@ async function startEvaluation() {
   step.value = 2
 }
 
-async function finish() {
+async function finishAndSave() {
   const turma = selectedClass.value
   if (!turma || !turma.uuid) return
 
-  // Converte o Objeto em Lista para enviar ao Java
   const list = Object.keys(evaluationData.value).map((studentId) => ({
-    studentId, // Aqui studentId já é o UUID pois usamos ele como chave acima
+    studentId,
     ...evaluationData.value[studentId]!,
   }))
 
@@ -85,27 +79,65 @@ async function finish() {
     toast.add({
       severity: 'success',
       summary: 'Sucesso',
-      detail: 'Avaliações salvas!',
+      detail: 'Avaliações salvas com sucesso!',
       life: 3000,
     })
-    // Reseta o fluxo
-    step.value = 1
-    selectedClass.value = null
-    evaluationData.value = {}
+    step.value = 3
   } else {
     toast.add({
       severity: 'error',
       summary: 'Erro',
-      detail: 'Falha ao salvar.',
+      detail: 'Falha ao salvar. Verifique permissões.',
       life: 3000,
     })
   }
+}
+
+function sendWhatsApp(student: any) {
+  if (!student.telefoneResponsavel) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Atenção',
+      detail: 'Telefone não cadastrado para este aluno.',
+    })
+    return
+  }
+
+  // Limpa o telefone (remove caracteres não numéricos)
+  const phone = student.telefoneResponsavel.replace(/\D/g, '')
+
+  const studentData = evaluationData.value[student.uuid]
+  const status = studentData?.promoted
+    ? 'PARABÉNS! Ele(a) foi promovido(a) de nível!'
+    : 'Ele(a) continua evoluindo muito bem.'
+
+  const text =
+    `Olá! Aqui é da ${selectedClass.value.academia?.nome || 'Escola de Natação'}.%0A%0A` +
+    `A avaliação do aluno(a) *${student.nome}* foi concluída.%0A` +
+    `Resultado: ${status}%0A%0A` +
+    `Você pode solicitar o relatório detalhado na secretaria.`
+
+  window.open(`https://wa.me/55${phone}?text=${text}`, '_blank')
+}
+
+function goToReports() {
+  router.push('/reports')
+}
+
+function backToDashboard() {
+  router.push('/')
 }
 </script>
 
 <template>
   <div class="max-w-4xl mx-auto">
-    <h1 class="text-2xl font-bold text-gray-800 mb-6">Avaliação de Turma</h1>
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold text-gray-800">
+        <span v-if="step === 1">Avaliação de Turma</span>
+        <span v-else-if="step === 2">Avaliando: {{ selectedClass?.nome }}</span>
+        <span v-else class="text-green-600">Avaliação Concluída! 🎉</span>
+      </h1>
+    </div>
 
     <div
       v-if="step === 1"
@@ -127,7 +159,7 @@ async function finish() {
       />
     </div>
 
-    <div v-else class="space-y-6">
+    <div v-else-if="step === 2" class="space-y-6">
       <Accordion multiple>
         <AccordionPanel
           v-for="student in studentsStore.students"
@@ -196,8 +228,77 @@ async function finish() {
         <Button
           label="Finalizar e Salvar"
           icon="pi pi-check"
-          @click="finish"
+          @click="finishAndSave"
           :loading="assessStore.loading"
+        />
+      </div>
+    </div>
+
+    <div v-else-if="step === 3" class="space-y-6">
+      <div
+        class="bg-green-50 p-6 rounded-xl border border-green-200 text-center"
+      >
+        <i class="pi pi-check-circle text-5xl text-green-500 mb-4"></i>
+        <h2 class="text-2xl font-bold text-green-800">Avaliações Salvas!</h2>
+        <p class="text-green-700">
+          O histórico dos alunos foi atualizado com sucesso.
+        </p>
+      </div>
+
+      <h3 class="font-bold text-gray-700 text-lg">Comunicar Responsáveis</h3>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card
+          v-for="student in studentsStore.students"
+          :key="student.uuid"
+          class="shadow-sm border border-gray-100"
+        >
+          <template #content>
+            <div class="flex justify-between items-center">
+              <div>
+                <span class="block font-bold text-gray-800">{{
+                  student.nome
+                }}</span>
+                <span
+                  class="text-xs font-bold uppercase px-2 py-1 rounded mt-1 inline-block"
+                  :class="
+                    evaluationData[student.uuid]?.promoted
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-blue-100 text-blue-700'
+                  "
+                >
+                  {{
+                    evaluationData[student.uuid]?.promoted
+                      ? 'Promovido'
+                      : 'Mantido'
+                  }}
+                </span>
+              </div>
+              <Button
+                icon="pi pi-whatsapp"
+                label="Avisar Pais"
+                severity="success"
+                text
+                @click="sendWhatsApp(student)"
+              />
+            </div>
+          </template>
+        </Card>
+      </div>
+
+      <div
+        class="flex flex-col sm:flex-row justify-between gap-4 mt-8 pt-6 border-t border-gray-200"
+      >
+        <Button
+          label="Voltar ao Dashboard"
+          icon="pi pi-home"
+          severity="secondary"
+          @click="backToDashboard"
+        />
+        <Button
+          label="Ver PDFs nos Relatórios"
+          icon="pi pi-file-pdf"
+          @click="goToReports"
         />
       </div>
     </div>

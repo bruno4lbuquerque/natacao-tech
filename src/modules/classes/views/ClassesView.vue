@@ -12,10 +12,15 @@ import InputText from 'primevue/inputtext'
 import Dialog from 'primevue/dialog'
 import Tag from 'primevue/tag'
 import MultiSelect from 'primevue/multiselect'
-import Dropdown from 'primevue/dropdown'
-import Calendar from 'primevue/calendar'
+import Select from 'primevue/select'
+import DatePicker from 'primevue/datepicker'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
+import ConfirmDialog from 'primevue/confirmdialog'
+import { useConfirm } from 'primevue/useconfirm'
 
 const toast = useToast()
+const confirm = useConfirm()
 const classesStore = useClassesStore()
 const levelsStore = useLevelsStore()
 
@@ -24,11 +29,12 @@ const submitting = ref(false)
 const searchQuery = ref('')
 const academias = ref<any[]>([])
 
+// FORMULÁRIO
 const form = ref({
   nome: '',
   horario: null as Date | null,
   diasSemana: [] as string[],
-  nivelAlvoId: '',
+  nivelAlvoId: null as string | null,
   academiaId: '',
 })
 
@@ -53,17 +59,16 @@ async function fetchAcademias() {
   try {
     const res = await api.get('/api/academias')
     academias.value = res.data
-    if (academias.value.length > 0) {
+    if (academias.value.length > 0 && !form.value.academiaId) {
       form.value.academiaId = academias.value[0].uuid
     }
   } catch (e) {
-    console.error('Erro ao buscar academias', e)
+    console.error('Erro ao buscar academias. Verifique se está logado.', e)
   }
 }
 
 const filteredClasses = computed(() => {
   if (!searchQuery.value) return classesStore.classes
-
   const lower = searchQuery.value.toLowerCase()
   return classesStore.classes.filter(
     (c) =>
@@ -71,13 +76,6 @@ const filteredClasses = computed(() => {
       (c.nivelAlvo?.nome && c.nivelAlvo.nome.toLowerCase().includes(lower))
   )
 })
-
-const levelOptions = computed(() =>
-  levelsStore.levels.map((l) => ({
-    label: l.nome,
-    value: l.uuid,
-  }))
-)
 
 const academiaOptions = computed(() =>
   academias.value.map((a) => ({
@@ -91,26 +89,71 @@ function openCreateModal() {
     nome: '',
     horario: null,
     diasSemana: [],
-    nivelAlvoId: '',
-    academiaId: academias.value[0]?.uuid || '',
+    nivelAlvoId: null,
+    academiaId: form.value.academiaId || academias.value[0]?.uuid || '',
   }
   showCreateModal.value = true
 }
 
+function confirmDelete(turma: any) {
+  confirm.require({
+    message: `Tem certeza que deseja excluir a turma "${turma.nome}"?`,
+    header: 'Confirmar Exclusão',
+    icon: 'pi pi-exclamation-triangle',
+    rejectLabel: 'Cancelar',
+    acceptLabel: 'Excluir',
+    rejectClass: 'p-button-secondary p-button-outlined',
+    acceptClass: 'p-button-danger',
+    accept: async () => {
+      const res = await classesStore.deleteClass(turma.uuid)
+      if (res.success) {
+        toast.add({
+          severity: 'success',
+          summary: 'Sucesso',
+          detail: 'Turma excluída.',
+        })
+      } else {
+        toast.add({
+          severity: 'error',
+          summary: 'Erro',
+          detail: 'Erro ao excluir (permissão?)',
+        })
+      }
+    },
+  })
+}
+
 async function saveClass() {
-  if (
-    !form.value.nome ||
-    !form.value.horario ||
-    form.value.diasSemana.length === 0 ||
-    !form.value.nivelAlvoId
-  ) {
-    toast.add({
+  if (!form.value.nome)
+    return toast.add({
       severity: 'warn',
       summary: 'Atenção',
-      detail: 'Preencha todos os campos obrigatórios.',
+      detail: 'Informe o nome da turma.',
     })
-    return
-  }
+  if (!form.value.horario)
+    return toast.add({
+      severity: 'warn',
+      summary: 'Atenção',
+      detail: 'Informe o horário.',
+    })
+  if (form.value.diasSemana.length === 0)
+    return toast.add({
+      severity: 'warn',
+      summary: 'Atenção',
+      detail: 'Selecione os dias.',
+    })
+  if (!form.value.nivelAlvoId)
+    return toast.add({
+      severity: 'warn',
+      summary: 'Atenção',
+      detail: 'Selecione o Nível.',
+    })
+  if (!form.value.academiaId)
+    return toast.add({
+      severity: 'error',
+      summary: 'Erro',
+      detail: 'Academia não identificada.',
+    })
 
   submitting.value = true
 
@@ -138,13 +181,18 @@ async function saveClass() {
       })
       showCreateModal.value = false
     } else {
-      throw new Error('Falha na criação')
+      toast.add({
+        severity: 'error',
+        summary: 'Erro',
+        detail: 'Falha ao criar. Verifique se é ADMIN.',
+      })
     }
   } catch (error) {
+    console.error(error)
     toast.add({
       severity: 'error',
       summary: 'Erro',
-      detail: 'Não foi possível criar a turma.',
+      detail: 'Falha na comunicação.',
     })
   } finally {
     submitting.value = false
@@ -154,21 +202,28 @@ async function saveClass() {
 
 <template>
   <div class="max-w-6xl mx-auto p-4 space-y-6">
+    <ConfirmDialog />
     <div class="flex flex-col md:flex-row justify-between items-center gap-4">
       <div>
         <h1 class="text-3xl font-bold text-gray-800">Minhas Turmas</h1>
         <p class="text-gray-500">Gerencie horários e níveis.</p>
       </div>
-      <div class="flex gap-2 w-full md:w-auto">
-        <span class="p-input-icon-left w-full md:w-64">
-          <i class="pi pi-search" />
+
+      <div class="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+        <IconField iconPosition="left" class="w-full sm:w-64">
+          <InputIcon class="pi pi-search" />
           <InputText
             v-model="searchQuery"
             placeholder="Buscar turma..."
             class="w-full"
           />
-        </span>
-        <Button label="Nova Turma" icon="pi pi-plus" @click="openCreateModal" />
+        </IconField>
+        <Button
+          label="Nova Turma"
+          icon="pi pi-plus"
+          @click="openCreateModal"
+          class="w-full sm:w-auto"
+        />
       </div>
     </div>
 
@@ -180,15 +235,23 @@ async function saveClass() {
       v-else-if="filteredClasses.length === 0"
       class="text-center py-12 bg-white rounded-xl border border-gray-100"
     >
-      <p class="text-gray-500">Nenhuma turma encontrada.</p>
+      <p class="text-gray-500">Nenhuma turma encontrada (ou acesso negado).</p>
     </div>
 
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div
         v-for="turma in filteredClasses"
         :key="turma.uuid"
-        class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all group"
+        class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all group relative"
       >
+        <Button
+          icon="pi pi-trash"
+          text
+          severity="danger"
+          class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+          @click="confirmDelete(turma)"
+        />
+
         <div class="flex justify-between items-start mb-4">
           <div
             class="w-12 h-12 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 font-bold text-lg group-hover:bg-sky-600 group-hover:text-white transition-colors"
@@ -222,13 +285,6 @@ async function saveClass() {
             <i class="pi pi-building mr-1"></i>
             {{ turma.nomeProfessor || 'Sua Turma' }}
           </span>
-          <Button
-            icon="pi pi-pencil"
-            text
-            rounded
-            severity="secondary"
-            aria-label="Editar"
-          />
         </div>
       </div>
     </div>
@@ -248,22 +304,24 @@ async function saveClass() {
         <div class="grid grid-cols-2 gap-4">
           <div class="flex flex-col gap-2">
             <label class="font-bold text-sm text-gray-700">Horário</label>
-            <Calendar
+            <DatePicker
               v-model="form.horario"
               timeOnly
               hourFormat="24"
               placeholder="00:00"
             />
           </div>
+
           <div class="flex flex-col gap-2">
             <label class="font-bold text-sm text-gray-700">Nível Alvo</label>
-            <Dropdown
+            <Select
               v-model="form.nivelAlvoId"
-              :options="levelOptions"
-              optionLabel="label"
-              optionValue="value"
-              placeholder="Selecione"
+              :options="levelsStore.levels"
+              optionLabel="nome"
+              optionValue="uuid"
+              placeholder="Selecione o nível"
               class="w-full"
+              filter
             />
           </div>
         </div>
@@ -276,7 +334,7 @@ async function saveClass() {
             optionLabel="label"
             optionValue="value"
             placeholder="Selecione os dias"
-            display="chip"
+            :maxSelectedLabels="3"
             class="w-full"
           />
         </div>
@@ -285,7 +343,7 @@ async function saveClass() {
           <label class="font-bold text-sm text-gray-700"
             >Unidade (Academia)</label
           >
-          <Dropdown
+          <Select
             v-model="form.academiaId"
             :options="academiaOptions"
             optionLabel="label"
