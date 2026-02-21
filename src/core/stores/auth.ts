@@ -59,11 +59,14 @@ export const useAuthStore = defineStore('auth', () => {
 
       return { success: true }
     } catch (error: any) {
-      console.error('Erro no login:', error)
-      const msg =
-        error.response?.status === 403
-          ? 'Usuário ou senha inválidos'
-          : 'Erro ao conectar com o servidor'
+      const status = error.response?.status
+      let msg = 'Não foi possível conectar ao servidor. Tente novamente.'
+      if (status === 401 || status === 403) {
+        msg =
+          'E-mail ou senha incorretos. Verifique seus dados e tente novamente.'
+      } else if (status === 429) {
+        msg = 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
+      }
       return { success: false, error: msg }
     } finally {
       loading.value = false

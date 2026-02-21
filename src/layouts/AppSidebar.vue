@@ -15,6 +15,15 @@ const menuItems = [
   { label: 'Relatórios', icon: 'pi pi-chart-bar', route: '/reports' },
 ]
 
+const adminItems = [
+  { label: 'Usuários', icon: 'pi pi-user-edit', route: '/admin/usuarios' },
+  {
+    label: 'Habilidades',
+    icon: 'pi pi-list-check',
+    route: '/admin/habilidades',
+  },
+]
+
 function navigate(path: string) {
   router.push(path)
 }
@@ -84,6 +93,43 @@ function logout() {
         ></i>
         <span>{{ item.label }}</span>
       </a>
+
+      <!-- Seção Admin: visível apenas para ADMIN -->
+      <template v-if="authStore.isAdmin">
+        <p
+          class="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mt-6 mb-2"
+        >
+          Administração
+        </p>
+
+        <a
+          v-for="item in adminItems"
+          :key="item.route"
+          @click="navigate(item.route)"
+          class="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all duration-200 font-medium group relative overflow-hidden"
+          :class="{
+            'bg-red-50 text-red-700 shadow-sm ring-1 ring-red-100':
+              route.path === item.route,
+            'text-slate-500 hover:bg-slate-50 hover:text-slate-900':
+              route.path !== item.route,
+          }"
+        >
+          <div
+            v-if="route.path === item.route"
+            class="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-1 bg-red-500 rounded-r-full"
+          ></div>
+          <i
+            :class="[
+              item.icon,
+              'text-lg transition-transform group-hover:scale-110 duration-200',
+              route.path === item.route
+                ? 'text-red-600'
+                : 'text-slate-400 group-hover:text-slate-600',
+            ]"
+          ></i>
+          <span>{{ item.label }}</span>
+        </a>
+      </template>
     </div>
 
     <div class="p-4 border-t border-slate-50 shrink-0">

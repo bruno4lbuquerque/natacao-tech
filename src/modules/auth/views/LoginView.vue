@@ -39,12 +39,8 @@ async function handleLogin() {
 
     router.push('/')
   } else {
-    if (result.error?.includes('Invalid login')) {
-      errorMessage.value = 'E-mail ou senha incorretos.'
-    } else {
-      console.error(result.error)
-      errorMessage.value = 'Erro ao conectar ao servidor.'
-    }
+    errorMessage.value =
+      result.error ?? 'Não foi possível realizar o login. Tente novamente.'
   }
 }
 </script>
