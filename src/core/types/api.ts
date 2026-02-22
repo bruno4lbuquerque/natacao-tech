@@ -1,76 +1,35 @@
-export interface NivelDTO {
-  uuid: string
-  nome: string
-  corTouca: string
-}
+import axios from 'axios'
 
-export interface HabilidadeDTO {
-  uuid: string
-  descricao: string
-  categoria: string
-}
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  timeout: 15_000,
+  headers: { 'Content-Type': 'application/json' },
+})
 
-export interface ProfessorDTO {
-  uuid: string
-  nome: string
-  email: string
-  nomeAcademia: string
-}
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
 
-export interface DashboardDTO {
-  totalTurmas: number
-  totalAlunos: number
-  turmasDeHoje: TurmaDTO[]
-  todasMinhasTurmas: TurmaDTO[]
-}
-
-export interface TurmaDTO {
-  uuid: string
-  nome: string
-  horario: string
-  diasSemana: string[]
-  nomeProfessor?: string
-  nivelAlvo?: {
-    uuid: string
-    nome: string
-    corTouca: string
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('role')
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(error)
   }
-  quantidadeAlunos?: number
-}
+)
 
-export interface CadastroTurmaDTO {
-  nome: string
-  horario: string
-  diasSemana: string[]
-  nivelAlvoId: string
-  academiaId: string
-}
-
-export interface AlunoDTO {
-  uuid: string
-  nome: string
-  responsavel?: string
-  telefone?: string
-  nivelAtual: string
-  corTouca: string
-  nomeTurma: string
-  nomeAcademia: string
-  ativo: boolean
-}
-
-export interface AvaliacaoRequestDTO {
-  alunoId: string
-  habilidadesAprovadasIds: string[]
-  observacao: string
-  promoverManual: boolean
-}
-
-export interface HistoricoAvaliacaoDTO {
-  uuid: string
-  dataAvaliacao: string
-  pontuacaoTotal: number
-  promovido: boolean
-  observacoes: string
-  nivel: string
-  habilidadesAprovadas: HabilidadeDTO[]
-}
+export default api

@@ -12,18 +12,29 @@ const menuItems = [
   { label: 'Turmas', icon: 'pi pi-calendar', route: '/classes' },
   { label: 'Alunos', icon: 'pi pi-users', route: '/students' },
   { label: 'Avaliações', icon: 'pi pi-check-square', route: '/assessments' },
-  // { label: 'Chamada', icon: 'pi pi-list', route: '/attendance' }, <--- REMOVIDO TEMPORARIAMENTE (Falta Backend)
   { label: 'Relatórios', icon: 'pi pi-chart-bar', route: '/reports' },
 ]
 
-const adminItems = [
-  { label: 'Usuários', icon: 'pi pi-user-edit', route: '/admin/usuarios' },
-  {
-    label: 'Habilidades',
-    icon: 'pi pi-list-check',
-    route: '/admin/habilidades',
-  },
-]
+const adminItems = computed(() => {
+  const items = []
+  if (authStore.isCoordenador) {
+    items.push({
+      label: 'Usuários',
+      icon: 'pi pi-user-edit',
+      route: '/admin/usuarios',
+    })
+  }
+  if (authStore.isDiretor) {
+    items.push({
+      label: 'Habilidades',
+      icon: 'pi pi-list-check',
+      route: '/admin/habilidades',
+    })
+  }
+  return items
+})
+
+const mostrarAdmin = computed(() => adminItems.value.length > 0)
 
 const iniciais = computed(() => {
   const [prefix] = (authStore.user || '').split('@')
@@ -38,10 +49,8 @@ const nomeExibicao = computed(() => {
 function navigate(path: string) {
   router.push(path)
 }
-
 function logout() {
   authStore.signOut()
-  router.push('/login')
 }
 </script>
 
@@ -57,7 +66,6 @@ function logout() {
         alt="AcquOn Logo"
         class="w-12 h-12 rounded-xl shadow-sm object-cover"
       />
-
       <div class="flex flex-col justify-center">
         <span
           class="font-bold text-xl tracking-tight text-slate-800 leading-tight"
@@ -105,14 +113,12 @@ function logout() {
         <span>{{ item.label }}</span>
       </a>
 
-      <!-- Seção Admin: visível apenas para ADMIN -->
-      <template v-if="authStore.isAdmin">
+      <template v-if="mostrarAdmin">
         <p
           class="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mt-6 mb-2"
         >
           Administração
         </p>
-
         <a
           v-for="item in adminItems"
           :key="item.route"
@@ -144,7 +150,6 @@ function logout() {
     </div>
 
     <div class="p-4 border-t border-slate-50 shrink-0 space-y-1">
-      <!-- Perfil -->
       <a
         @click="navigate('/perfil')"
         class="w-full flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all duration-200 group"
@@ -168,7 +173,6 @@ function logout() {
         <i class="pi pi-angle-right text-xs ml-auto opacity-40"></i>
       </a>
 
-      <!-- Sair -->
       <button
         @click="logout"
         class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-red-50 hover:text-red-600 hover:shadow-sm transition-all duration-200 group"

@@ -17,27 +17,34 @@ export default defineConfig({
         background_color: '#ffffff',
         display: 'standalone',
         icons: [
-          {
-            src: '/pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-          },
-          {
-            src: '/pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-          },
+          { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
         ],
       },
     }),
   ],
+
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+
   server: {
     port: 5173,
+
+    headers: {
+      'X-Content-Type-Options': 'nosniff',
+
+      'X-Frame-Options': 'DENY',
+
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    },
+
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
@@ -50,5 +57,10 @@ export default defineConfig({
         secure: false,
       },
     },
+  },
+
+  build: {
+    minify: 'esbuild',
+    target: 'es2020',
   },
 })

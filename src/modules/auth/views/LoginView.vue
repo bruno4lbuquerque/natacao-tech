@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/core/stores/auth'
 import { useToast } from 'primevue/usetoast'
@@ -19,8 +19,58 @@ const router = useRouter()
 const toast = useToast()
 const authStore = useAuthStore()
 
+const COOLDOWN_MS = 2_000
+const MAX_TENTATIVAS_RAPIDAS = 5
+const BLOQUEIO_MS = 30_000
+
+let ultimaTentativa = 0
+let contadorTentativas = 0
+let bloqueadoAte = 0
+
+const bloqueado = ref(false)
+const cooldownLabel = ref('')
+let cooldownInterval: ReturnType<typeof setInterval> | null = null
+
+function iniciarBloqueio(duracaoMs: number) {
+  bloqueadoAte = Date.now() + duracaoMs
+  bloqueado.value = true
+
+  if (cooldownInterval) clearInterval(cooldownInterval)
+  cooldownInterval = setInterval(() => {
+    const restante = Math.ceil((bloqueadoAte - Date.now()) / 1000)
+    if (restante <= 0) {
+      bloqueado.value = false
+      cooldownLabel.value = ''
+      if (cooldownInterval) clearInterval(cooldownInterval)
+    } else {
+      cooldownLabel.value = `Aguarde ${restante}s`
+    }
+  }, 500)
+}
+
+const botaoLabel = computed(() => cooldownLabel.value || 'Acessar Painel')
+
 async function handleLogin() {
   errorMessage.value = ''
+
+  if (bloqueado.value || Date.now() < bloqueadoAte) return
+
+  const agora = Date.now()
+  if (agora - ultimaTentativa < COOLDOWN_MS) {
+    iniciarBloqueio(COOLDOWN_MS - (agora - ultimaTentativa))
+    return
+  }
+
+  ultimaTentativa = agora
+  contadorTentativas++
+
+  if (contadorTentativas >= MAX_TENTATIVAS_RAPIDAS) {
+    contadorTentativas = 0
+    errorMessage.value =
+      'Muitas tentativas seguidas. Aguarde antes de tentar novamente.'
+    iniciarBloqueio(BLOQUEIO_MS)
+    return
+  }
 
   if (!email.value || !password.value) {
     errorMessage.value = 'Preencha todos os campos.'
@@ -30,13 +80,13 @@ async function handleLogin() {
   const result = await authStore.signIn(email.value, password.value)
 
   if (result.success) {
+    contadorTentativas = 0
     toast.add({
       severity: 'success',
       summary: 'Bem-vindo!',
       detail: 'Login realizado com sucesso.',
       life: 2000,
     })
-
     router.push('/')
   } else {
     errorMessage.value =
@@ -80,15 +130,23 @@ async function handleLogin() {
         severity="error"
         :closable="false"
         class="mb-6"
-        >{{ errorMessage }}</Message
       >
+        {{ errorMessage }}
+      </Message>
 
-      <form @submit.prevent="handleLogin" class="space-y-6">
+      <Message v-if="bloqueado" severity="warn" :closable="false" class="mb-4">
+        <i class="pi pi-clock mr-2"></i>{{ cooldownLabel }}
+      </Message>
+
+      <form @submit.prevent="handleLogin" class="space-y-6" autocomplete="on">
         <FloatLabel>
           <InputText
             id="email"
             v-model="email"
+            type="email"
+            autocomplete="email"
             class="w-full p-3 bg-white/50 border-gray-200 focus:border-brand-500 focus:ring-0"
+            :disabled="authStore.loading || bloqueado"
           />
           <label for="email">E-mail Corporativo</label>
         </FloatLabel>
@@ -99,8 +157,10 @@ async function handleLogin() {
             v-model="password"
             :feedback="false"
             toggleMask
+            autocomplete="current-password"
             inputClass="w-full p-3 bg-white/50 border-gray-200 focus:border-brand-500 focus:ring-0"
             class="w-full"
+            :disabled="authStore.loading || bloqueado"
           />
           <label for="password">Sua Senha</label>
         </FloatLabel>
@@ -123,9 +183,10 @@ async function handleLogin() {
 
         <Button
           type="submit"
-          label="Acessar Painel"
+          :label="botaoLabel"
           class="w-full p-4 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white font-bold rounded-xl shadow-lg shadow-brand-200 transform transition-all active:scale-95 text-lg"
           :loading="authStore.loading"
+          :disabled="bloqueado"
         />
       </form>
 

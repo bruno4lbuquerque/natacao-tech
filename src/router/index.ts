@@ -13,6 +13,14 @@ const StudentsView = () => import('@/modules/students/views/StudentsView.vue')
 const ReportsView = () => import('@/modules/reports/views/ReportsView.vue')
 const ClassesView = () => import('@/modules/classes/views/ClassesView.vue')
 
+declare module 'vue-router' {
+  interface RouteMeta {
+    public?: boolean
+    requiresAuth?: boolean
+    allowedRoles?: Array<'ADMIN' | 'DIRETOR' | 'COORDENADOR' | 'PROFESSOR'>
+  }
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -43,35 +51,44 @@ const router = createRouter({
           component: () => import('@/modules/profile/views/ProfileView.vue'),
         },
 
-        // Rotas Admin — dentro do AppLayout para herdar sidebar/navbar
         {
           path: 'admin/usuarios',
           name: 'admin-usuarios',
           component: () =>
             import('@/modules/admin/views/AdminUsuariosView.vue'),
-          meta: { requiresAdmin: true },
+          meta: {
+            requiresAuth: true,
+            allowedRoles: ['ADMIN', 'DIRETOR', 'COORDENADOR'],
+          },
         },
+
         {
           path: 'admin/habilidades',
           name: 'admin-habilidades',
           component: () => import('@/modules/admin/views/HabilidadesView.vue'),
-          meta: { requiresAdmin: true },
+          meta: {
+            requiresAuth: true,
+            allowedRoles: ['ADMIN', 'DIRETOR'],
+          },
         },
       ],
     },
+
+    { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
 
 router.beforeEach((to, _from, next) => {
-  const authStore = useAuthStore()
+  const auth = useAuthStore()
 
-  if (!authStore.token) {
-    authStore.checkAuth()
+  if (!auth.token) {
+    auth.checkAuth()
   }
 
-  const isAuthenticated = !!authStore.token
+  const isAuthenticated = !!auth.token
+  const isPublic = to.meta.public === true
   const requiresAuth = to.matched.some((r) => r.meta.requiresAuth)
-  const requiresAdmin = to.matched.some((r) => r.meta.requiresAdmin)
+  const allowedRoles = to.meta.allowedRoles
 
   if (requiresAuth && !isAuthenticated) {
     return next('/login')
@@ -81,7 +98,7 @@ router.beforeEach((to, _from, next) => {
     return next('/')
   }
 
-  if (requiresAdmin && authStore.userRole !== 'ADMIN') {
+  if (allowedRoles && auth.role && !allowedRoles.includes(auth.role as any)) {
     return next('/')
   }
 
