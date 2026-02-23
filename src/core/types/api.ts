@@ -1,35 +1,59 @@
-import axios from 'axios'
+export interface NivelDTO {
+  uuid: string
+  nome: string
+  corTouca?: string | null
+}
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
-  timeout: 15_000,
-  headers: { 'Content-Type': 'application/json' },
-})
+export interface TurmaDTO {
+  uuid: string
+  nome: string
+  horario: string
+  diasSemana: string[]
+  nomeProfessor?: string | null
+  nivelAlvo?: { uuid: string; nome: string; corTouca?: string | null } | null
+  quantidadeAlunos?: number
+}
 
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error) => Promise.reject(error)
-)
+export interface CadastroTurmaDTO {
+  nome: string
+  horario: string
+  diasSemana: string[]
+  nivelAlvoId: string | null
+  academiaId: string
+}
 
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      localStorage.removeItem('role')
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
-      }
-    }
-    return Promise.reject(error)
-  }
-)
+export interface HabilidadeDTO {
+  uuid: string
+  descricao: string
+  categoria: string
+  ativo: boolean
+}
 
-export default api
+export interface AlunoDTO {
+  uuid: string
+  nome: string
+  nivelAtual?: string | null
+  corTouca?: string | null
+  nomeTurma?: string | null
+  nomeAcademia?: string | null
+  ativo?: boolean
+  nomeResponsavel?: string | null
+  telefoneResponsavel?: string | null
+}
+
+export interface DashboardDTO {
+  totalTurmas: number
+  totalAlunos: number
+  turmasDeHoje: TurmaDTO[]
+  todasMinhasTurmas: TurmaDTO[]
+}
+
+export interface HistoricoAvaliacaoDTO {
+  uuid: string
+  dataAvaliacao: string
+  nivel: string
+  pontuacaoTotal?: number
+  promovido: boolean
+  observacoes?: string | null
+  habilidadesAprovadas?: string[] | null
+}

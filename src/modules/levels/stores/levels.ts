@@ -10,7 +10,7 @@ export const useLevelsStore = defineStore('levels', () => {
   async function fetchLevels() {
     loading.value = true
     try {
-      const response = await api.get('/api/niveis')
+      const response = await api.get<NivelDTO[]>('/api/niveis')
       levels.value = response.data
     } catch (error) {
       console.error('Erro ao buscar níveis:', error)

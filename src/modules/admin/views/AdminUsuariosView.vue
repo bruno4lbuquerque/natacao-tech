@@ -526,8 +526,16 @@ function excluirAcad(acad: Academia) {
 
 // ── Turmas: funções ──────────────────────────────────────────────────────
 async function carregarNiveis() {
-  const { data } = await api.get<Nivel[]>('/api/niveis')
-  niveis.value = data
+  try {
+    const { data } = await api.get<Nivel[]>('/api/niveis')
+    niveis.value = data
+  } catch {
+    toast.add({
+      severity: 'error',
+      summary: 'Erro',
+      detail: 'Falha ao carregar níveis.',
+    })
+  }
 }
 
 async function carregarTurmas() {
