@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useDashboardStore } from '@/modules/dashboard/stores/dashboard'
-import { formatDays } from '@/core/utils/formatters' // <--- 1. IMPORTANTE: Importar o formatador
+import { formatDays } from '@/core/utils/formatters'
 
 const store = useDashboardStore()
 
@@ -104,10 +104,13 @@ onMounted(() => {
             :key="turma.uuid"
             class="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-xl transition-colors border border-transparent hover:border-gray-100"
           >
-            <div class="text-center min-w-[3rem]">
-              <span class="block text-gray-800 font-bold">{{
-                turma.horario
-              }}</span>
+            <div class="text-center min-w-[3.5rem]">
+              <span class="block text-gray-800 font-bold text-sm">
+                {{ turma.horarioInicio?.substring(0, 5) ?? '--:--' }}
+              </span>
+              <span class="block text-gray-400 text-xs">
+                {{ turma.horarioFim?.substring(0, 5) ?? '--:--' }}
+              </span>
             </div>
 
             <div class="w-1 h-10 bg-brand-200 rounded-full"></div>
@@ -117,10 +120,9 @@ onMounted(() => {
               <p class="text-xs text-gray-500">
                 {{ turma.nivelAlvo?.nome || 'Multinível' }}
               </p>
-
               <div class="flex gap-1 mt-1">
                 <span
-                  v-for="day in formatDays(turma.diasSemana)"
+                  v-for="day in formatDays(turma.diasSemana ?? [])"
                   :key="day"
                   class="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded"
                 >

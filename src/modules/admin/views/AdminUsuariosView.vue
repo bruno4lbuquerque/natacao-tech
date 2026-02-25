@@ -56,7 +56,8 @@ interface Nivel {
 interface Turma {
   uuid: string
   nome: string
-  horario: string
+  horarioInicio: string
+  horarioFim: string
   diasSemana: string[]
   professor?: { nome: string } | null
   nivelAlvo?: { nome: string } | null
@@ -111,12 +112,14 @@ const modalTurma = ref(false)
 const salvandoTurma = ref(false)
 const formTurma = ref({
   nome: '',
-  horario: '',
+  horarioInicio: '',
+  horarioFim: '',
   professorId: '' as string,
   nivelAlvoId: '' as string,
   diasSemana: [] as string[],
 })
 
+// ── Alunos ──────────────────────────────────────────────────────────────
 const alunos = ref<Aluno[]>([])
 const buscaAluno = ref('')
 const loadingAlunos = ref(false)
@@ -145,7 +148,6 @@ const DIAS = [
   { label: 'Sáb', value: 'SABADO' },
 ]
 
-// ── Computed ────────────────────────────────────────────────────────────
 const professoresFiltrados = computed(() => {
   const q = buscaProf.value.toLowerCase()
   if (!q) return professores.value
@@ -187,7 +189,6 @@ const turmasParaTransf = computed(() => {
   return turmas.value.filter((t) => t.nome !== alunoTransf.value?.nomeTurma)
 })
 
-// ── Lifecycle ───────────────────────────────────────────────────────────
 onMounted(async () => {
   const calls: Promise<any>[] = [
     carregarAcademias(),
@@ -199,7 +200,6 @@ onMounted(async () => {
   await Promise.all(calls)
 })
 
-// ── Professores: funções ─────────────────────────────────────────────────
 async function carregarProfessores() {
   loadingProf.value = true
   try {
@@ -459,22 +459,32 @@ async function salvarAcad() {
   if (!validarAcad()) return
   submittingAcad.value = true
   try {
-    const payload = {
+    const dadosJson = JSON.stringify({
       nome: formAcad.value.nome,
       endereco: formAcad.value.endereco,
       telefone: formAcad.value.telefone,
       email: formAcad.value.email || null,
       cnpj: formAcad.value.cnpj || null,
-    }
+    })
+    const formData = new FormData()
+    formData.append(
+      'dados',
+      new Blob([dadosJson], { type: 'application/json' })
+    )
+
     if (editandoAcad.value && uuidAcad.value) {
-      await api.put(`/api/academias/${uuidAcad.value}`, payload)
+      await api.put(`/api/academias/${uuidAcad.value}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       toast.add({
         severity: 'success',
         summary: 'Sucesso',
         detail: 'Academia atualizada!',
       })
     } else {
-      await api.post('/api/academias', payload)
+      await api.post('/api/academias', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       toast.add({
         severity: 'success',
         summary: 'Sucesso',
@@ -524,18 +534,9 @@ function excluirAcad(acad: Academia) {
   })
 }
 
-// ── Turmas: funções ──────────────────────────────────────────────────────
 async function carregarNiveis() {
-  try {
-    const { data } = await api.get<Nivel[]>('/api/niveis')
-    niveis.value = data
-  } catch {
-    toast.add({
-      severity: 'error',
-      summary: 'Erro',
-      detail: 'Falha ao carregar níveis.',
-    })
-  }
+  const { data } = await api.get<Nivel[]>('/api/niveis')
+  niveis.value = data
 }
 
 async function carregarTurmas() {
@@ -551,7 +552,8 @@ async function carregarTurmas() {
 function abrirModalTurma() {
   formTurma.value = {
     nome: '',
-    horario: '',
+    horarioInicio: '',
+    horarioFim: '',
     professorId: '',
     nivelAlvoId: '',
     diasSemana: [],
@@ -566,12 +568,12 @@ function toggleDia(dia: string) {
 }
 
 async function salvarTurma() {
-  const { nome, horario, diasSemana } = formTurma.value
-  if (!nome || !horario || diasSemana.length === 0) {
+  const { nome, horarioInicio, horarioFim, diasSemana } = formTurma.value
+  if (!nome || !horarioInicio || !horarioFim || diasSemana.length === 0) {
     toast.add({
       severity: 'warn',
       summary: 'Atenção',
-      detail: 'Preencha nome, horário e ao menos um dia.',
+      detail: 'Preencha nome, horários e ao menos um dia.',
     })
     return
   }
@@ -579,7 +581,9 @@ async function salvarTurma() {
   try {
     await api.post('/api/turmas', {
       nome,
-      horario: horario + ':00',
+      horarioInicio:
+        horarioInicio.length === 5 ? horarioInicio + ':00' : horarioInicio,
+      horarioFim: horarioFim.length === 5 ? horarioFim + ':00' : horarioFim,
       diasSemana,
       professorId: formTurma.value.professorId || null,
       nivelAlvoId: formTurma.value.nivelAlvoId || null,
@@ -747,7 +751,6 @@ function desligarAluno(aluno: Aluno) {
   })
 }
 
-// ── Utils ────────────────────────────────────────────────────────────────
 function iniciais(nome: string) {
   return (
     nome
@@ -759,7 +762,6 @@ function iniciais(nome: string) {
   )
 }
 
-// Badge visual por cargo — usa o campo `cargo` do DetalhamentoProfessorDTO
 function cargoBadge(cargo: string) {
   const map: Record<string, { label: string; cls: string }> = {
     ADMIN: {
@@ -845,7 +847,6 @@ function diasAbrev(dias: string[]) {
           </span>
         </Tab>
 
-        <!-- Turmas e Alunos: ADMIN, DIRETOR e COORDENADOR -->
         <Tab v-if="isCoordenador" value="turmas">
           <i class="pi pi-calendar mr-2"></i>
           Turmas
@@ -867,7 +868,6 @@ function diasAbrev(dias: string[]) {
       </TabList>
 
       <TabPanels>
-        <!-- ─── ABA: PROFESSORES ──────────────────────────────────────── -->
         <TabPanel value="professores">
           <div class="space-y-4 pt-4">
             <div
@@ -921,7 +921,6 @@ function diasAbrev(dias: string[]) {
                   class="flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors group"
                 >
                   <div class="flex items-center gap-4 min-w-0">
-                    <!-- Avatar: cor diferente para Coordenador -->
                     <div
                       class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm shrink-0"
                       :class="
@@ -952,7 +951,6 @@ function diasAbrev(dias: string[]) {
                   </div>
 
                   <div class="flex items-center gap-2 shrink-0 ml-3">
-                    <!-- Badge de cargo — sempre visível -->
                     <span
                       class="text-xs font-semibold px-2 py-0.5 rounded-full hidden sm:inline-flex"
                       :class="cargoBadge(prof.cargo).cls"
@@ -960,7 +958,6 @@ function diasAbrev(dias: string[]) {
                       {{ cargoBadge(prof.cargo).label }}
                     </span>
 
-                    <!-- Ações aparecem no hover -->
                     <div
                       class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
@@ -974,13 +971,6 @@ function diasAbrev(dias: string[]) {
                         @click="abrirEditarProf(prof)"
                       />
 
-                      <!--
-                        Promoção/Rebaixamento: regra de negócio da imagem:
-                        - Só ADMIN/DIRETOR podem promover e rebaixar
-                        - Não se pode alterar ADMIN ou DIRETOR
-                        - Promover: só se cargo atual for PROFESSOR
-                        - Rebaixar: só se cargo atual for COORDENADOR
-                      -->
                       <Button
                         v-if="isDiretor && prof.cargo === 'PROFESSOR'"
                         icon="pi pi-arrow-up"
@@ -1061,7 +1051,6 @@ function diasAbrev(dias: string[]) {
           </div>
         </TabPanel>
 
-        <!-- ─── ABA: ACADEMIAS ────────────────────────────────────────── -->
         <TabPanel value="academias">
           <div class="space-y-4 pt-4">
             <div
@@ -1203,7 +1192,10 @@ function diasAbrev(dias: string[]) {
                     </p>
                     <p class="text-xs text-slate-500 mt-1">
                       <i class="pi pi-clock mr-1"></i
-                      >{{ formatarHorario(turma.horario) }}
+                      >{{ formatarHorario(turma.horarioInicio) }}
+                      <span v-if="turma.horarioFim">
+                        – {{ formatarHorario(turma.horarioFim) }}</span
+                      >
                       <span v-if="turma.diasSemana?.length">
                         · {{ diasAbrev(turma.diasSemana) }}</span
                       >
@@ -1245,7 +1237,6 @@ function diasAbrev(dias: string[]) {
           </div>
         </TabPanel>
 
-        <!-- ─── ABA: ALUNOS ───────────────────────────────────────────── -->
         <TabPanel value="alunos">
           <div class="space-y-4 pt-4">
             <div
@@ -1558,11 +1549,27 @@ function diasAbrev(dias: string[]) {
             class="w-full"
           />
         </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5"
-            >Horário *</label
-          >
-          <InputText v-model="formTurma.horario" type="time" class="w-full" />
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5"
+              >Início *</label
+            >
+            <InputText
+              v-model="formTurma.horarioInicio"
+              type="time"
+              class="w-full"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5"
+              >Fim *</label
+            >
+            <InputText
+              v-model="formTurma.horarioFim"
+              type="time"
+              class="w-full"
+            />
+          </div>
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-600 mb-2"
@@ -1627,7 +1634,6 @@ function diasAbrev(dias: string[]) {
       </template>
     </Dialog>
 
-    <!-- ── Modal: Matricular Aluno ─────────────────────────────────────── -->
     <Dialog
       v-model:visible="modalAluno"
       modal
@@ -1721,7 +1727,6 @@ function diasAbrev(dias: string[]) {
       </template>
     </Dialog>
 
-    <!-- ── Modal: Transferir Aluno ─────────────────────────────────────── -->
     <Dialog
       v-model:visible="modalTransf"
       modal

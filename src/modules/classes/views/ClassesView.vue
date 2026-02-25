@@ -1,27 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
-import api from '@/core/services/api'
 
 import { useClassesStore } from '@/modules/classes/stores/classes'
 import { useLevelsStore } from '@/modules/levels/stores/levels'
 import { formatDays } from '@/core/utils/formatters'
-
-interface TurmaItem {
-  uuid: string
-  nome: string
-  horario: string
-  diasSemana: string[]
-  professor?: {
-    uuid: string
-    nome: string
-    email: string
-    nomeAcademia: string
-    cargo?: string | null
-  } | null
-  nivelAlvo?: { uuid: string; nome: string; corTouca?: string | null } | null
-  quantidadeAlunos?: number
-}
 
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -35,6 +18,23 @@ import InputIcon from 'primevue/inputicon'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { useConfirm } from 'primevue/useconfirm'
 
+interface TurmaItem {
+  uuid: string
+  nome: string
+  horarioInicio: string
+  horarioFim: string
+  diasSemana: string[]
+  professor?: {
+    uuid: string
+    nome: string
+    email: string
+    nomeAcademia: string
+    cargo?: string | null
+  } | null
+  nivelAlvo?: { uuid: string; nome: string; corTouca?: string | null } | null
+  quantidadeAlunos?: number
+}
+
 const toast = useToast()
 const confirm = useConfirm()
 const classesStore = useClassesStore()
@@ -43,14 +43,14 @@ const levelsStore = useLevelsStore()
 const showCreateModal = ref(false)
 const submitting = ref(false)
 const searchQuery = ref('')
-const academias = ref<any[]>([])
 
 const form = ref({
   nome: '',
-  horario: null as Date | null,
+  horarioInicio: null as Date | null,
+  horarioFim: null as Date | null,
   diasSemana: [] as string[],
   nivelAlvoId: null as string | null,
-  academiaId: '',
+  professorId: null as string | null,
 })
 
 const weekDays = [
@@ -63,51 +63,43 @@ const weekDays = [
 ]
 
 onMounted(async () => {
-  await Promise.all([
-    classesStore.fetchClasses(),
-    levelsStore.fetchLevels(),
-    fetchAcademias(),
-  ])
+  await Promise.all([classesStore.fetchClasses(), levelsStore.fetchLevels()])
 })
-
-async function fetchAcademias() {
-  try {
-    const res = await api.get('/api/academias')
-    academias.value = res.data
-    if (academias.value.length > 0 && !form.value.academiaId) {
-      form.value.academiaId = academias.value[0].uuid
-    }
-  } catch (e) {
-    console.error('Erro ao buscar academias. Verifique se está logado.', e)
-  }
-}
 
 const filteredClasses = computed(() => {
   if (!searchQuery.value) return classesStore.classes
   const lower = searchQuery.value.toLowerCase()
   return classesStore.classes.filter(
     (c: TurmaItem) =>
-      c.nome.toLowerCase().includes(lower) ||
-      (c.nivelAlvo?.nome && c.nivelAlvo.nome.toLowerCase().includes(lower))
+      (c.nome ?? '').toLowerCase().includes(lower) ||
+      (c.nivelAlvo?.nome?.toLowerCase().includes(lower) ?? false)
   )
 })
 
-const academiaOptions = computed(() =>
-  academias.value.map((a) => ({ label: a.nome, value: a.uuid }))
-)
+function formatarHorario(horario: string | null | undefined): string {
+  if (!horario) return '--:--'
+  return horario.substring(0, 5)
+}
+
+function toTimeString(date: Date): string {
+  const h = date.getHours().toString().padStart(2, '0')
+  const m = date.getMinutes().toString().padStart(2, '0')
+  return `${h}:${m}`
+}
 
 function openCreateModal() {
   form.value = {
     nome: '',
-    horario: null,
+    horarioInicio: null,
+    horarioFim: null,
     diasSemana: [],
     nivelAlvoId: null,
-    academiaId: form.value.academiaId || academias.value[0]?.uuid || '',
+    professorId: null,
   }
   showCreateModal.value = true
 }
 
-function confirmDelete(turma: any) {
+function confirmDelete(turma: TurmaItem) {
   confirm.require({
     message: `Tem certeza que deseja excluir a turma "${turma.nome}"?`,
     header: 'Confirmar Exclusão',
@@ -128,7 +120,7 @@ function confirmDelete(turma: any) {
         toast.add({
           severity: 'error',
           summary: 'Erro',
-          detail: 'Erro ao excluir (permissão?)',
+          detail: 'Não foi possível excluir a turma.',
         })
       }
     },
@@ -142,43 +134,40 @@ async function saveClass() {
       summary: 'Atenção',
       detail: 'Informe o nome da turma.',
     })
-  if (!form.value.horario)
+  if (!form.value.horarioInicio)
     return toast.add({
       severity: 'warn',
       summary: 'Atenção',
-      detail: 'Informe o horário.',
+      detail: 'Informe o horário de início.',
+    })
+  if (!form.value.horarioFim)
+    return toast.add({
+      severity: 'warn',
+      summary: 'Atenção',
+      detail: 'Informe o horário de fim.',
     })
   if (form.value.diasSemana.length === 0)
     return toast.add({
       severity: 'warn',
       summary: 'Atenção',
-      detail: 'Selecione os dias.',
+      detail: 'Selecione ao menos um dia.',
     })
   if (!form.value.nivelAlvoId)
     return toast.add({
       severity: 'warn',
       summary: 'Atenção',
-      detail: 'Selecione o Nível.',
-    })
-  if (!form.value.academiaId)
-    return toast.add({
-      severity: 'error',
-      summary: 'Erro',
-      detail: 'Academia não identificada.',
+      detail: 'Selecione o nível alvo.',
     })
 
   submitting.value = true
   try {
-    const timeString = form.value.horario.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
     const payload = {
       nome: form.value.nome,
-      horario: timeString,
+      horarioInicio: toTimeString(form.value.horarioInicio),
+      horarioFim: toTimeString(form.value.horarioFim),
       diasSemana: form.value.diasSemana,
       nivelAlvoId: form.value.nivelAlvoId,
-      academiaId: form.value.academiaId,
+      professorId: form.value.professorId ?? null,
     }
     const res = await classesStore.createClass(payload)
     if (res.success) {
@@ -192,7 +181,7 @@ async function saveClass() {
       toast.add({
         severity: 'error',
         summary: 'Erro',
-        detail: 'Falha ao criar. Verifique se é ADMIN.',
+        detail: res.error ?? 'Falha ao criar turma.',
       })
     }
   } catch (error) {
@@ -200,7 +189,7 @@ async function saveClass() {
     toast.add({
       severity: 'error',
       summary: 'Erro',
-      detail: 'Falha na comunicação.',
+      detail: 'Falha na comunicação com o servidor.',
     })
   } finally {
     submitting.value = false
@@ -243,7 +232,8 @@ async function saveClass() {
       v-else-if="filteredClasses.length === 0"
       class="text-center py-12 bg-white rounded-xl border border-gray-100"
     >
-      <p class="text-gray-500">Nenhuma turma encontrada (ou acesso negado).</p>
+      <i class="pi pi-calendar text-4xl text-slate-200 mb-3 block"></i>
+      <p class="text-gray-500">Nenhuma turma encontrada.</p>
     </div>
 
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -257,7 +247,7 @@ async function saveClass() {
             <div
               class="w-12 h-12 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600 font-bold text-xl group-hover:bg-sky-600 group-hover:text-white transition-colors duration-300"
             >
-              {{ turma.nome.charAt(0).toUpperCase() }}
+              {{ turma.nome?.charAt(0)?.toUpperCase() ?? '?' }}
             </div>
             <Tag
               :value="turma.nivelAlvo?.nome || 'Multinível'"
@@ -270,14 +260,17 @@ async function saveClass() {
             {{ turma.nome }}
           </h3>
 
-          <div class="flex items-center gap-2 text-gray-500 text-sm mb-4">
+          <div class="flex items-center gap-2 text-gray-500 text-sm mb-2">
             <i class="pi pi-clock text-sky-400"></i>
-            <span class="font-medium">{{ turma.horario.substring(0, 5) }}</span>
+            <span class="font-medium">
+              {{ formatarHorario(turma.horarioInicio) }} –
+              {{ formatarHorario(turma.horarioFim) }}
+            </span>
           </div>
 
           <div class="flex flex-wrap gap-1 mb-4">
             <span
-              v-for="(dia, i) in formatDays(turma.diasSemana)"
+              v-for="(dia, i) in formatDays(turma.diasSemana ?? [])"
               :key="`${turma.uuid}-dia-${i}`"
               class="text-[10px] uppercase font-bold px-2 py-1 bg-slate-50 text-slate-500 rounded-md border border-slate-100"
             >
@@ -293,7 +286,7 @@ async function saveClass() {
             class="text-xs text-gray-400 font-medium flex items-center gap-1"
           >
             <i class="pi pi-user"></i>
-            {{ turma.professor?.nome || 'Sem prof.' }}
+            {{ turma.professor?.nome || 'Sem professor' }}
           </span>
           <Button
             icon="pi pi-trash"
@@ -312,40 +305,60 @@ async function saveClass() {
       v-model:visible="showCreateModal"
       modal
       header="Nova Turma"
-      :style="{ width: '30rem' }"
+      :style="{ width: '32rem' }"
     >
       <div class="flex flex-col gap-4 pt-2">
         <div class="flex flex-col gap-2">
-          <label class="font-bold text-sm text-gray-700">Nome da Turma</label>
+          <label class="font-bold text-sm text-gray-700"
+            >Nome da Turma <span class="text-red-500">*</span></label
+          >
           <InputText v-model="form.nome" placeholder="Ex: Baby Manhã A" />
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div class="flex flex-col gap-2">
-            <label class="font-bold text-sm text-gray-700">Horário</label>
+            <label class="font-bold text-sm text-gray-700"
+              >Início <span class="text-red-500">*</span></label
+            >
             <DatePicker
-              v-model="form.horario"
+              v-model="form.horarioInicio"
               timeOnly
               hourFormat="24"
-              placeholder="00:00"
+              placeholder="09:00"
             />
           </div>
           <div class="flex flex-col gap-2">
-            <label class="font-bold text-sm text-gray-700">Nível Alvo</label>
-            <Select
-              v-model="form.nivelAlvoId"
-              :options="levelsStore.levels"
-              optionLabel="nome"
-              optionValue="uuid"
-              placeholder="Selecione o nível"
-              class="w-full"
-              filter
+            <label class="font-bold text-sm text-gray-700"
+              >Fim <span class="text-red-500">*</span></label
+            >
+            <DatePicker
+              v-model="form.horarioFim"
+              timeOnly
+              hourFormat="24"
+              placeholder="10:00"
             />
           </div>
         </div>
 
         <div class="flex flex-col gap-2">
-          <label class="font-bold text-sm text-gray-700">Dias da Semana</label>
+          <label class="font-bold text-sm text-gray-700"
+            >Nível Alvo <span class="text-red-500">*</span></label
+          >
+          <Select
+            v-model="form.nivelAlvoId"
+            :options="levelsStore.levels"
+            optionLabel="nome"
+            optionValue="uuid"
+            placeholder="Selecione o nível"
+            class="w-full"
+            filter
+          />
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <label class="font-bold text-sm text-gray-700"
+            >Dias da Semana <span class="text-red-500">*</span></label
+          >
           <MultiSelect
             v-model="form.diasSemana"
             :options="weekDays"
@@ -357,20 +370,7 @@ async function saveClass() {
           />
         </div>
 
-        <div class="flex flex-col gap-2">
-          <label class="font-bold text-sm text-gray-700"
-            >Unidade (Academia)</label
-          >
-          <Select
-            v-model="form.academiaId"
-            :options="academiaOptions"
-            optionLabel="label"
-            optionValue="value"
-            class="w-full"
-          />
-        </div>
-
-        <div class="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
+        <div class="flex justify-end gap-2 mt-2 pt-4 border-t border-gray-100">
           <Button
             label="Cancelar"
             severity="secondary"

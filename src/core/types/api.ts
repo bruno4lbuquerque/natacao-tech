@@ -15,7 +15,8 @@ export interface ProfessorResumoDTO {
 export interface TurmaDTO {
   uuid: string
   nome: string
-  horario: string
+  horarioInicio: string
+  horarioFim: string
   diasSemana: string[]
   professor?: ProfessorResumoDTO | null
   nivelAlvo?: { uuid: string; nome: string; corTouca?: string | null } | null
@@ -24,10 +25,11 @@ export interface TurmaDTO {
 
 export interface CadastroTurmaDTO {
   nome: string
-  horario: string
+  horarioInicio: string
+  horarioFim: string
   diasSemana: string[]
   nivelAlvoId: string | null
-  academiaId: string
+  professorId?: string | null
 }
 
 export interface HabilidadeDTO {
