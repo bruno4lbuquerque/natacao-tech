@@ -5,11 +5,8 @@ import { useConfirm } from 'primevue/useconfirm'
 import api from '@/core/services/api'
 
 import Button from 'primevue/button'
-import Select from 'primevue/select'
-import Textarea from 'primevue/textarea'
 import Dialog from 'primevue/dialog'
 import ConfirmDialog from 'primevue/confirmdialog'
-import ProgressBar from 'primevue/progressbar'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -32,10 +29,8 @@ interface Aluno {
   nivelAtual?: NivelResumo | null
   nivelAtualNome?: string
   telefoneResponsavel?: string | null
-  telefone?: string | null
 }
 
-// HabilidadeDTO (de /api/niveis/{uuid}/habilidades)
 interface Habilidade {
   uuid: string
   descricao: string
@@ -43,7 +38,6 @@ interface Habilidade {
   ativo: boolean
 }
 
-// HistoricoAvaliacaoDTO
 interface Historico {
   uuid: string
   dataAvaliacao: string
@@ -54,57 +48,97 @@ interface Historico {
   observacoes: string | null
 }
 
-interface AvaliacaoAluno {
-  habilidadesMarcadas: Set<string>
-  observacao: string
-  promover: boolean
-}
+const etapa = ref<number>(1)
 
-// ── Estado ────────────────────────────────────────────────────────────────
 const turmas = ref<Turma[]>([])
 const turmaSelecionada = ref<Turma | null>(null)
-const alunos = ref<Aluno[]>([])
-const habilidades = ref<Habilidade[]>([])
-
 const loadingTurmas = ref(false)
 const loadingAlunos = ref(false)
+
+const alunos = ref<Aluno[]>([])
+const habilidades = ref<Habilidade[]>([])
+const alunosSelecionados = ref<Set<string>>(new Set())
+const buscaAluno = ref('')
+
+const perguntaAtual = ref(0)
+const respostas = ref<Record<string, Record<string, boolean>>>({})
+
 const salvando = ref(false)
 
-const avaliacoes = ref<Record<string, AvaliacaoAluno>>({})
-const alunoExpandido = ref<string | null>(null)
-
-// Modal histórico
 const modalHistorico = ref(false)
 const alunoModal = ref<Aluno | null>(null)
 const historico = ref<Historico[]>([])
 const loadingHistorico = ref(false)
-const enviandoWhatsApp = ref<Record<string, boolean>>({})
 const baixandoPdf = ref<Record<string, boolean>>({})
+const enviandoWA = ref<Record<string, boolean>>({})
 
-// ── Computed ──────────────────────────────────────────────────────────────
-const habilidadesPorCategoria = computed(() => {
-  const grupos: Record<string, Habilidade[]> = {}
-  for (const h of habilidades.value) {
-    grupos[h.categoria] ??= []
-    grupos[h.categoria]!.push(h)
-  }
-  return grupos
+const alunosFiltrados = computed(() => {
+  const q = buscaAluno.value.toLowerCase().trim()
+  if (!q) return alunos.value
+  return alunos.value.filter((a) => a.nome.toLowerCase().includes(q))
 })
 
-const totalAvaliados = computed(
-  () =>
-    alunos.value.filter(
-      (a) => (avaliacoes.value[a.uuid]?.habilidadesMarcadas.size ?? 0) > 0
-    ).length
+const alunosSelecionadosLista = computed(() =>
+  alunos.value.filter((a) => alunosSelecionados.value.has(a.uuid))
 )
 
-const progressoAvaliacao = computed(() =>
-  alunos.value.length > 0
-    ? Math.round((totalAvaliados.value / alunos.value.length) * 100)
+const habilidadesAtivas = computed(() =>
+  habilidades.value.filter((h) => h.ativo !== false)
+)
+
+const perguntaCorrente = computed(
+  () => habilidadesAtivas.value[perguntaAtual.value] ?? null
+)
+
+const totalPerguntas = computed(() => habilidadesAtivas.value.length)
+
+const progresso = computed(() =>
+  totalPerguntas.value > 0
+    ? Math.round(((perguntaAtual.value + 1) / totalPerguntas.value) * 100)
     : 0
 )
 
+const isUltimaPergunta = computed(
+  () => perguntaAtual.value === totalPerguntas.value - 1
+)
+
+const semRespostaAtual = computed(() => {
+  const hab = perguntaCorrente.value
+  if (!hab) return 0
+  return alunosSelecionadosLista.value.filter(
+    (a) => respostas.value[hab.uuid]?.[a.uuid] === undefined
+  ).length
+})
+
+const resultado = computed(() =>
+  alunosSelecionadosLista.value.map((aluno) => {
+    const aprovadas = habilidadesAtivas.value.filter(
+      (h) => respostas.value[h.uuid]?.[aluno.uuid] === true
+    ).length
+    const total = habilidadesAtivas.value.length
+    return {
+      aluno,
+      aprovadas,
+      total,
+      pct: total > 0 ? Math.round((aprovadas / total) * 100) : 0,
+    }
+  })
+)
+
 onMounted(carregarTurmas)
+
+function irParaEtapa1() {
+  etapa.value = 1
+}
+
+function irParaEtapa2() {
+  etapa.value = 2
+}
+
+function revisar() {
+  etapa.value = 3
+  perguntaAtual.value = 0
+}
 
 async function carregarTurmas() {
   loadingTurmas.value = true
@@ -122,144 +156,158 @@ async function carregarTurmas() {
   }
 }
 
-async function aoSelecionarTurma() {
-  if (!turmaSelecionada.value) return
-
+async function selecionarTurma(turma: Turma) {
+  turmaSelecionada.value = turma
   loadingAlunos.value = true
   alunos.value = []
   habilidades.value = []
-  avaliacoes.value = {}
-  alunoExpandido.value = null
-
+  alunosSelecionados.value = new Set()
+  buscaAluno.value = ''
   try {
     const { data: alunosData } = await api.get<Aluno[]>(
-      `/api/turmas/${turmaSelecionada.value.uuid}/alunos`
+      `/api/turmas/${turma.uuid}/alunos`
     )
     alunos.value = alunosData
 
     const nivelUuid =
-      turmaSelecionada.value.nivelAlvo?.uuid ??
-      alunosData[0]?.nivelAtual?.uuid ??
-      null
-
+      turma.nivelAlvo?.uuid ?? alunosData[0]?.nivelAtual?.uuid ?? null
     if (nivelUuid) {
       const { data: habsData } = await api.get<Habilidade[]>(
         `/api/niveis/${nivelUuid}/habilidades`
       )
       habilidades.value = habsData.filter((h) => h.ativo !== false)
     }
-
-    for (const aluno of alunosData) {
-      avaliacoes.value[aluno.uuid] = {
-        habilidadesMarcadas: new Set(),
-        observacao: '',
-        promover: false,
-      }
-    }
   } catch (e: any) {
     toast.add({
       severity: 'error',
       summary: 'Erro',
-      detail: e.response?.data?.message ?? 'Falha ao carregar dados da turma.',
+      detail: e.response?.data?.message ?? 'Falha ao carregar dados.',
     })
   } finally {
     loadingAlunos.value = false
   }
 }
 
-function toggleHabilidade(alunoUuid: string, habUuid: string) {
-  const av = avaliacoes.value[alunoUuid]
-  if (av === undefined) return
-  if (av.habilidadesMarcadas.has(habUuid)) {
-    av.habilidadesMarcadas.delete(habUuid)
+function toggleAluno(uuid: string) {
+  if (alunosSelecionados.value.has(uuid)) {
+    alunosSelecionados.value.delete(uuid)
   } else {
-    av.habilidadesMarcadas.add(habUuid)
+    alunosSelecionados.value.add(uuid)
   }
 }
 
-function togglePromover(alunoUuid: string) {
-  const av = avaliacoes.value[alunoUuid]
-  if (av === undefined) return
-  av.promover = !av.promover
+function selecionarTodos() {
+  alunos.value.forEach((a) => alunosSelecionados.value.add(a.uuid))
 }
 
-function isMarcada(alunoUuid: string, habUuid: string) {
-  return avaliacoes.value[alunoUuid]?.habilidadesMarcadas.has(habUuid) ?? false
+function limparSelecao() {
+  alunosSelecionados.value = new Set()
 }
 
-function pontuacao(alunoUuid: string) {
-  return avaliacoes.value[alunoUuid]?.habilidadesMarcadas.size ?? 0
-}
-
-function percentual(alunoUuid: string) {
-  const total = habilidades.value.length
-  return total > 0 ? Math.round((pontuacao(alunoUuid) / total) * 100) : 0
-}
-
-function marcarTodas(alunoUuid: string) {
-  habilidades.value.forEach((h) =>
-    avaliacoes.value[alunoUuid]?.habilidadesMarcadas.add(h.uuid)
-  )
-}
-
-function limpar(alunoUuid: string) {
-  avaliacoes.value[alunoUuid]?.habilidadesMarcadas.clear()
-}
-
-// ── Salvar lote ───────────────────────────────────────────────────────────
-async function salvarAvaliacao() {
-  const alunosAvaliados = alunos.value.filter(
-    (a) => (avaliacoes.value[a.uuid]?.habilidadesMarcadas.size ?? 0) > 0
-  )
-
-  if (alunosAvaliados.length === 0) {
+function avancarParaWizard() {
+  if (alunosSelecionados.value.size === 0) {
     toast.add({
       severity: 'warn',
       summary: 'Atenção',
-      detail: 'Marque ao menos uma habilidade.',
+      detail: 'Selecione ao menos um aluno.',
     })
     return
   }
+  if (habilidadesAtivas.value.length === 0) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Atenção',
+      detail: 'Nenhuma habilidade cadastrada para este nível.',
+    })
+    return
+  }
+  respostas.value = {}
+  habilidadesAtivas.value.forEach((h) => {
+    respostas.value[h.uuid] = {}
+  })
+  perguntaAtual.value = 0
+  etapa.value = 3
+}
 
+function responder(alunoUuid: string, valor: boolean) {
+  const hab = perguntaCorrente.value
+  if (!hab) return
+  if (!respostas.value[hab.uuid]) respostas.value[hab.uuid] = {}
+  const bloco = respostas.value[hab.uuid] as Record<string, boolean>
+  bloco[alunoUuid] = valor
+}
+
+function getResposta(alunoUuid: string): boolean | undefined {
+  const habUuid = perguntaCorrente.value?.uuid
+  if (!habUuid) return undefined
+  return respostas.value[habUuid]?.[alunoUuid]
+}
+
+function marcarTodosSim() {
+  const hab = perguntaCorrente.value
+  if (!hab) return
+  if (!respostas.value[hab.uuid]) respostas.value[hab.uuid] = {}
+  const bloco = respostas.value[hab.uuid] as Record<string, boolean>
+  alunosSelecionadosLista.value.forEach((a) => {
+    bloco[a.uuid] = true
+  })
+}
+
+function marcarTodosNao() {
+  const hab = perguntaCorrente.value
+  if (!hab) return
+  if (!respostas.value[hab.uuid]) respostas.value[hab.uuid] = {}
+  const bloco = respostas.value[hab.uuid] as Record<string, boolean>
+  alunosSelecionadosLista.value.forEach((a) => {
+    bloco[a.uuid] = false
+  })
+}
+
+function proximaPergunta() {
+  if (!isUltimaPergunta.value) {
+    perguntaAtual.value++
+  } else {
+    etapa.value = 4
+  }
+}
+
+function voltarPergunta() {
+  if (perguntaAtual.value > 0) {
+    perguntaAtual.value--
+  } else {
+    etapa.value = 2
+  }
+}
+
+async function salvarAvaliacao() {
   confirm.require({
-    message: `Salvar avaliação de ${alunosAvaliados.length} aluno(s)?`,
+    message: `Salvar avaliação de ${alunosSelecionadosLista.value.length} aluno(s)?`,
     header: 'Confirmar Avaliação',
     icon: 'pi pi-check-circle',
     acceptLabel: 'Salvar',
-    rejectLabel: 'Cancelar',
+    rejectLabel: 'Revisar',
     accept: async () => {
       salvando.value = true
       try {
         const payload = {
           turmaId: turmaSelecionada.value!.uuid,
-          avaliacoes: alunosAvaliados.map((aluno) => {
-            const av = avaliacoes.value[aluno.uuid]
-            return {
-              alunoId: aluno.uuid,
-              habilidadesAprovadasIds: [...av!.habilidadesMarcadas],
-              observacao: av!.observacao?.trim() || null,
-              promoverManual: av!.promover,
-            }
-          }),
+          avaliacoes: alunosSelecionadosLista.value.map((aluno) => ({
+            alunoId: aluno.uuid,
+            habilidadesAprovadasIds: habilidadesAtivas.value
+              .filter((h) => respostas.value[h.uuid]?.[aluno.uuid] === true)
+              .map((h) => h.uuid),
+            observacao: null,
+            promoverManual: false,
+          })),
         }
-
         await api.post('/api/avaliacoes/lote', payload)
-
         toast.add({
           severity: 'success',
           summary: 'Avaliação salva!',
-          detail: `${alunosAvaliados.length} aluno(s) avaliado(s) com sucesso.`,
+          detail: `${alunosSelecionadosLista.value.length} aluno(s) avaliado(s).`,
           life: 5000,
         })
-
-        for (const aluno of alunosAvaliados) {
-          avaliacoes.value[aluno.uuid] = {
-            habilidadesMarcadas: new Set(),
-            observacao: '',
-            promover: false,
-          }
-        }
-        alunoExpandido.value = null
+        reiniciar()
       } catch (e: any) {
         toast.add({
           severity: 'error',
@@ -273,7 +321,17 @@ async function salvarAvaliacao() {
   })
 }
 
-// ── Histórico ─────────────────────────────────────────────────────────────
+function reiniciar() {
+  etapa.value = 1
+  turmaSelecionada.value = null
+  alunos.value = []
+  habilidades.value = []
+  alunosSelecionados.value = new Set()
+  respostas.value = {}
+  perguntaAtual.value = 0
+  buscaAluno.value = ''
+}
+
 async function abrirHistorico(aluno: Aluno) {
   alunoModal.value = aluno
   historico.value = []
@@ -295,7 +353,6 @@ async function abrirHistorico(aluno: Aluno) {
   }
 }
 
-// ── PDF ───────────────────────────────────────────────────────────────────
 async function baixarPdf(hist: Historico) {
   baixandoPdf.value[hist.uuid] = true
   try {
@@ -322,60 +379,23 @@ async function baixarPdf(hist: Historico) {
   }
 }
 
-// ── WhatsApp ──────────────────────────────────────────────────────────────
 async function enviarWhatsApp(hist: Historico) {
-  const tel = getTelefone(alunoModal.value)
-  if (!tel) {
-    toast.add({
-      severity: 'warn',
-      summary: 'Sem telefone',
-      detail: 'Nenhum telefone cadastrado para este responsável.',
-    })
-    return
-  }
-
-  enviandoWhatsApp.value[hist.uuid] = true
+  enviandoWA.value[hist.uuid] = true
   try {
     await api.post(`/api/whatsapp/enviar-avaliacao/${hist.uuid}`)
-    toast.add({
-      severity: 'success',
-      summary: 'WhatsApp enviado!',
-      detail: `Relatório enviado para ${tel}.`,
-      life: 5000,
-    })
+    toast.add({ severity: 'success', summary: 'WhatsApp enviado!', life: 5000 })
   } catch (e: any) {
     toast.add({
       severity: 'error',
       summary: 'Erro ao enviar',
-      detail: e.response?.data?.message ?? 'Falha ao enviar pelo WhatsApp.',
+      detail: e.response?.data?.message ?? 'Falha ao enviar.',
     })
   } finally {
-    enviandoWhatsApp.value[hist.uuid] = false
+    enviandoWA.value[hist.uuid] = false
   }
 }
 
-// ── Utils ─────────────────────────────────────────────────────────────────
-function getTelefone(aluno: Aluno | null): string | null {
-  return aluno?.telefoneResponsavel ?? aluno?.telefone ?? null
-}
-
-function getNivelNome(aluno: Aluno): string {
-  return aluno.nivelAtual?.nome ?? aluno.nivelAtualNome ?? ''
-}
-
-function getCorTouca(cor: string | null | undefined): Record<string, string> {
-  return cor ? { backgroundColor: cor, color: '#fff' } : {}
-}
-
-function formatarData(dt: string) {
-  return new Date(dt).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-}
-
-function iniciais(nome: string) {
+function iniciais(nome: string): string {
   return (nome ?? '?')
     .split(' ')
     .slice(0, 2)
@@ -383,336 +403,635 @@ function iniciais(nome: string) {
     .join('')
     .toUpperCase()
 }
+
+function formatarData(dt: string): string {
+  return new Date(dt).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
+function getNivelNome(aluno: Aluno): string {
+  return (
+    turmaSelecionada.value?.nivelAlvo?.nome ??
+    aluno.nivelAtual?.nome ??
+    aluno.nivelAtualNome ??
+    ''
+  )
+}
+
+function getCorTouca(cor: string | null | undefined): Record<string, string> {
+  return cor ? { backgroundColor: cor } : {}
+}
+
+function avatarCls(resp: boolean | undefined): string {
+  if (resp === true) return 'bg-gradient-to-br from-emerald-400 to-emerald-600'
+  if (resp === false) return 'bg-gradient-to-br from-red-400 to-red-500'
+  return 'bg-slate-200'
+}
+
+function avatarTxtCls(resp: boolean | undefined): string {
+  return resp === undefined ? 'text-slate-500' : 'text-white'
+}
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto space-y-6 p-4">
+  <div class="max-w-3xl mx-auto space-y-5 p-4">
     <ConfirmDialog />
 
-    <div>
-      <h1 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
-        Avaliações
-      </h1>
-      <p class="text-slate-500 text-sm mt-1">
-        Avalie as habilidades dos alunos e envie relatórios por WhatsApp aos
-        responsáveis.
-      </p>
-    </div>
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-800 tracking-tight">
+          Avaliações
+        </h1>
+        <p class="text-slate-400 text-sm mt-0.5">
+          <span v-if="etapa === 1">Selecione a turma para iniciar</span>
+          <span v-else-if="etapa === 2">Escolha os alunos a avaliar</span>
+          <span v-else-if="etapa === 3">
+            Pergunta {{ perguntaAtual + 1 }} de {{ totalPerguntas }}
+          </span>
+          <span v-else>Resumo da avaliação</span>
+        </p>
+      </div>
 
-    <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-      <label class="block text-sm font-semibold text-slate-700 mb-2"
-        >Turma</label
-      >
-      <Select
-        v-model="turmaSelecionada"
-        :options="turmas"
-        optionLabel="nome"
-        placeholder="Selecione uma turma..."
-        class="w-full md:w-96"
-        :loading="loadingTurmas"
-        @change="aoSelecionarTurma"
-      />
-      <p v-if="turmaSelecionada?.nivelAlvo" class="text-xs text-slate-400 mt-2">
-        <i class="pi pi-tag mr-1"></i>Nível alvo:
-        <strong>{{ turmaSelecionada.nivelAlvo.nome }}</strong>
-      </p>
-    </div>
-
-    <div v-if="loadingAlunos" class="flex justify-center py-16">
-      <i class="pi pi-spin pi-spinner text-4xl text-sky-400"></i>
-    </div>
-
-    <div
-      v-else-if="!turmaSelecionada"
-      class="text-center py-16 bg-white rounded-xl border border-dashed border-slate-200"
-    >
-      <i class="pi pi-check-square text-5xl text-slate-200 mb-3 block"></i>
-      <p class="text-slate-400 font-medium">Selecione uma turma para começar</p>
-    </div>
-
-    <div
-      v-else-if="alunos.length === 0"
-      class="text-center py-16 bg-white rounded-xl border border-dashed border-slate-200"
-    >
-      <i class="pi pi-users text-5xl text-slate-200 mb-3 block"></i>
-      <p class="text-slate-400 font-medium">
-        Nenhum aluno matriculado nesta turma
-      </p>
-    </div>
-
-    <template v-else>
-      <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-sm font-semibold text-slate-700"
-            >Progresso da avaliação</span
-          >
-          <span class="text-sm text-slate-500"
-            >{{ totalAvaliados }}/{{ alunos.length }} alunos</span
-          >
+      <div class="hidden sm:flex items-center gap-1">
+        <div
+          v-for="n in [1, 2, 3, 4]"
+          :key="n"
+          class="flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition-all"
+          :class="
+            etapa === n
+              ? 'bg-sky-500 text-white shadow-sm shadow-sky-200'
+              : etapa > n
+                ? 'bg-emerald-100 text-emerald-600'
+                : 'bg-slate-100 text-slate-400'
+          "
+        >
+          <i v-if="etapa > n" class="pi pi-check" style="font-size: 0.6rem"></i>
+          <span v-else>{{ n }}</span>
         </div>
-        <ProgressBar :value="progressoAvaliacao" class="h-2" />
+      </div>
+    </div>
+
+    <template v-if="etapa === 1">
+      <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+        <p
+          class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4"
+        >
+          <i class="pi pi-calendar mr-1.5 text-sky-400"></i>Selecione a turma
+        </p>
+
+        <div v-if="loadingTurmas" class="flex justify-center py-10">
+          <i class="pi pi-spin pi-spinner text-3xl text-sky-400"></i>
+        </div>
+
+        <div
+          v-else-if="turmas.length === 0"
+          class="text-center py-10 text-slate-400"
+        >
+          <i class="pi pi-calendar text-4xl mb-2 block"></i>
+          Nenhuma turma encontrada.
+        </div>
+
+        <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            v-for="turma in turmas"
+            :key="turma.uuid"
+            @click="selecionarTurma(turma)"
+            class="flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left hover:border-sky-300 hover:bg-sky-50 group"
+            :class="
+              turmaSelecionada?.uuid === turma.uuid && !loadingAlunos
+                ? 'border-sky-400 bg-sky-50 ring-2 ring-sky-100'
+                : 'border-slate-100 bg-slate-50'
+            "
+          >
+            <div
+              class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white font-bold shrink-0"
+            >
+              {{ turma.nome.charAt(0).toUpperCase() }}
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="font-semibold text-slate-800 text-sm truncate">
+                {{ turma.nome }}
+              </p>
+              <p
+                v-if="turma.nivelAlvo"
+                class="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5"
+              >
+                <span
+                  class="w-2.5 h-2.5 rounded-full inline-block border border-white/30"
+                  :style="
+                    turma.nivelAlvo.corTouca
+                      ? { backgroundColor: turma.nivelAlvo.corTouca }
+                      : { backgroundColor: '#0ea5e9' }
+                  "
+                ></span>
+                {{ turma.nivelAlvo.nome }}
+              </p>
+            </div>
+            <i
+              v-if="turmaSelecionada?.uuid === turma.uuid && !loadingAlunos"
+              class="pi pi-check-circle text-sky-500 shrink-0"
+            ></i>
+          </button>
+        </div>
+      </div>
+
+      <div
+        v-if="loadingAlunos"
+        class="bg-white rounded-2xl border border-slate-100 p-8 flex flex-col items-center gap-3"
+      >
+        <i class="pi pi-spin pi-spinner text-3xl text-sky-400"></i>
+        <p class="text-slate-400 text-sm">Carregando alunos e habilidades...</p>
+      </div>
+
+      <div
+        v-if="turmaSelecionada && !loadingAlunos && alunos.length > 0"
+        class="flex justify-end"
+      >
+        <button
+          @click="irParaEtapa2"
+          class="flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-sm shadow-sky-200 active:scale-95"
+        >
+          Selecionar Alunos <i class="pi pi-arrow-right text-sm"></i>
+        </button>
+      </div>
+
+      <div
+        v-if="
+          turmaSelecionada &&
+          !loadingAlunos &&
+          alunos.length === 0 &&
+          !loadingTurmas
+        "
+        class="bg-white rounded-2xl border border-dashed border-slate-200 p-8 text-center text-slate-400"
+      >
+        <i class="pi pi-users text-4xl mb-2 block"></i>
+        Nenhum aluno matriculado nesta turma.
+      </div>
+    </template>
+
+    <template v-else-if="etapa === 2">
+      <div
+        class="flex items-center gap-3 bg-sky-50 border border-sky-100 rounded-xl px-4 py-3"
+      >
+        <button
+          @click="irParaEtapa1"
+          class="text-sky-600 hover:text-sky-800 transition-colors"
+        >
+          <i class="pi pi-arrow-left text-sm"></i>
+        </button>
+        <div
+          class="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0"
+        >
+          {{ turmaSelecionada?.nome.charAt(0).toUpperCase() }}
+        </div>
+        <div>
+          <p class="font-semibold text-sky-800 text-sm">
+            {{ turmaSelecionada?.nome }}
+          </p>
+          <p v-if="turmaSelecionada?.nivelAlvo" class="text-xs text-sky-500">
+            {{ turmaSelecionada.nivelAlvo.nome }} ·
+            {{ habilidadesAtivas.length }} habilidade(s)
+          </p>
+        </div>
+      </div>
+
+      <div
+        class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
+      >
+        <div class="p-4 border-b border-slate-50 space-y-3">
+          <div class="relative">
+            <i
+              class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none"
+            ></i>
+            <input
+              v-model="buscaAluno"
+              type="text"
+              placeholder="Buscar aluno por nome..."
+              class="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 bg-slate-50 placeholder:text-slate-400"
+            />
+          </div>
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-slate-500">
+              <span class="font-bold text-sky-600">{{
+                alunosSelecionados.size
+              }}</span>
+              de {{ alunos.length }} selecionados
+            </p>
+            <div class="flex gap-2">
+              <button
+                @click="selecionarTodos"
+                class="text-xs font-semibold text-sky-600 hover:text-sky-700 px-3 py-1.5 rounded-lg hover:bg-sky-50 border border-sky-200 transition-colors"
+              >
+                Todos
+              </button>
+              <button
+                @click="limparSelecao"
+                class="text-xs font-semibold text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-50 border border-slate-200 transition-colors"
+              >
+                Limpar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="divide-y divide-slate-50 max-h-72 overflow-y-auto">
+          <div
+            v-for="aluno in alunosFiltrados"
+            :key="aluno.uuid"
+            role="button"
+            tabindex="0"
+            @click="toggleAluno(aluno.uuid)"
+            @keydown.enter="toggleAluno(aluno.uuid)"
+            class="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition-colors text-left group cursor-pointer"
+          >
+            <div
+              class="w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all"
+              :class="
+                alunosSelecionados.has(aluno.uuid)
+                  ? 'bg-sky-500 border-sky-500'
+                  : 'border-slate-300 bg-white group-hover:border-sky-300'
+              "
+            >
+              <i
+                v-if="alunosSelecionados.has(aluno.uuid)"
+                class="pi pi-check text-white"
+                style="font-size: 0.6rem"
+              ></i>
+            </div>
+            <div
+              class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-all"
+              :class="
+                alunosSelecionados.has(aluno.uuid)
+                  ? 'bg-gradient-to-br from-sky-400 to-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-500'
+              "
+            >
+              {{ iniciais(aluno.nome) }}
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="font-semibold text-slate-800 text-sm truncate">
+                {{ aluno.nome }}
+              </p>
+              <p
+                v-if="getNivelNome(aluno)"
+                class="text-xs text-slate-400 mt-0.5"
+              >
+                {{ getNivelNome(aluno) }}
+              </p>
+            </div>
+            <button
+              @click.stop="abrirHistorico(aluno)"
+              class="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-sky-600 hover:bg-sky-50"
+              title="Ver histórico"
+            >
+              <i class="pi pi-history text-xs"></i>
+            </button>
+          </div>
+
+          <div
+            v-if="alunosFiltrados.length === 0"
+            class="text-center py-8 text-slate-400 text-sm"
+          >
+            Nenhum aluno encontrado.
+          </div>
+        </div>
+      </div>
+
+      <button
+        @click="avancarParaWizard"
+        :disabled="alunosSelecionados.size === 0"
+        class="w-full flex items-center justify-center gap-2 bg-sky-500 hover:bg-sky-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold px-6 py-4 rounded-xl transition-all shadow-sm shadow-sky-200 active:scale-95"
+      >
+        <i class="pi pi-play text-sm"></i>
+        Iniciar Avaliação
+        <span
+          v-if="alunosSelecionados.size > 0"
+          class="bg-white/25 text-white text-xs font-bold px-2 py-0.5 rounded-full"
+        >
+          {{ alunosSelecionados.size }} aluno(s)
+        </span>
+      </button>
+    </template>
+
+    <template v-else-if="etapa === 3 && perguntaCorrente">
+      <div
+        class="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <span
+            class="text-xs font-bold text-slate-500 uppercase tracking-wider"
+            >Progresso</span
+          >
+          <span class="text-xs font-bold text-sky-600">
+            {{ perguntaAtual + 1 }}/{{ totalPerguntas }}
+          </span>
+        </div>
+        <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            class="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-500"
+            :style="{ width: `${progresso}%` }"
+          ></div>
+        </div>
+        <div class="flex items-center justify-between mt-2">
+          <p class="text-xs text-slate-400">
+            <i class="pi pi-tag mr-1 text-slate-300"></i>
+            {{ perguntaCorrente.categoria }}
+          </p>
+          <p
+            v-if="semRespostaAtual > 0"
+            class="text-xs text-amber-500 font-semibold"
+          >
+            <i class="pi pi-exclamation-circle mr-1"></i>
+            {{ semRespostaAtual }} sem resposta
+          </p>
+          <p v-else class="text-xs text-emerald-500 font-semibold">
+            <i class="pi pi-check-circle mr-1"></i>Todos respondidos
+          </p>
+        </div>
+      </div>
+
+      <div
+        class="bg-gradient-to-br from-sky-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-sky-200/50"
+      >
+        <div class="flex items-center gap-2 mb-3 opacity-70">
+          <i class="pi pi-question-circle text-sm"></i>
+          <span class="text-xs font-bold uppercase tracking-wider">
+            Pergunta {{ perguntaAtual + 1 }}
+          </span>
+        </div>
+        <h2 class="text-xl md:text-2xl font-bold leading-snug">
+          {{ perguntaCorrente.descricao }}
+        </h2>
+        <div class="flex gap-2 mt-5">
+          <button
+            @click="marcarTodosSim"
+            class="flex items-center gap-1.5 text-xs font-bold px-3 py-2 bg-white/20 hover:bg-white/30 rounded-xl transition-colors"
+          >
+            <i class="pi pi-check text-emerald-300"></i> Todos SIM
+          </button>
+          <button
+            @click="marcarTodosNao"
+            class="flex items-center gap-1.5 text-xs font-bold px-3 py-2 bg-white/20 hover:bg-white/30 rounded-xl transition-colors"
+          >
+            <i class="pi pi-times text-red-300"></i> Todos NÃO
+          </button>
+        </div>
+      </div>
+
+      <div
+        class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
+      >
+        <div class="px-5 py-3 border-b border-slate-50">
+          <p class="text-sm font-semibold text-slate-700">
+            Alunos · {{ turmaSelecionada?.nivelAlvo?.nome ?? '' }}
+          </p>
+        </div>
+        <div class="divide-y divide-slate-50">
+          <div
+            v-for="aluno in alunosSelecionadosLista"
+            :key="aluno.uuid"
+            class="flex items-center justify-between px-5 py-4 transition-colors"
+            :class="
+              getResposta(aluno.uuid) === undefined
+                ? 'bg-amber-50/40'
+                : 'bg-white'
+            "
+          >
+            <div class="flex items-center gap-3 min-w-0">
+              <div
+                class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-all"
+                :class="[
+                  avatarCls(getResposta(aluno.uuid)),
+                  avatarTxtCls(getResposta(aluno.uuid)),
+                ]"
+              >
+                {{ iniciais(aluno.nome) }}
+              </div>
+              <div class="min-w-0">
+                <p class="font-semibold text-slate-800 text-sm truncate">
+                  {{ aluno.nome }}
+                </p>
+                <p
+                  class="text-xs mt-0.5"
+                  :class="{
+                    'text-emerald-600': getResposta(aluno.uuid) === true,
+                    'text-red-500': getResposta(aluno.uuid) === false,
+                    'text-amber-400': getResposta(aluno.uuid) === undefined,
+                  }"
+                >
+                  {{
+                    getResposta(aluno.uuid) === true
+                      ? '✓ Sim'
+                      : getResposta(aluno.uuid) === false
+                        ? '✗ Não'
+                        : 'Aguardando...'
+                  }}
+                </p>
+              </div>
+            </div>
+
+            <div class="flex gap-2 shrink-0">
+              <button
+                @click="responder(aluno.uuid, false)"
+                class="w-[4.5rem] py-2.5 rounded-xl text-sm font-bold border-2 transition-all active:scale-95"
+                :class="
+                  getResposta(aluno.uuid) === false
+                    ? 'bg-red-500 text-white border-red-500 shadow-sm shadow-red-200'
+                    : 'bg-white text-red-400 border-red-200 hover:border-red-400 hover:bg-red-50'
+                "
+              >
+                NÃO
+              </button>
+              <button
+                @click="responder(aluno.uuid, true)"
+                class="w-[4.5rem] py-2.5 rounded-xl text-sm font-bold border-2 transition-all active:scale-95"
+                :class="
+                  getResposta(aluno.uuid) === true
+                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm shadow-emerald-200'
+                    : 'bg-white text-emerald-500 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50'
+                "
+              >
+                SIM
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button
+          @click="voltarPergunta"
+          class="flex-1 flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl border-2 border-slate-200 text-slate-600 font-bold hover:bg-slate-50 hover:border-slate-300 transition-all"
+        >
+          <i class="pi pi-arrow-left text-sm"></i> Voltar
+        </button>
+        <button
+          @click="proximaPergunta"
+          class="flex-[2] flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold transition-all active:scale-95 shadow-sm"
+          :class="
+            isUltimaPergunta
+              ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-200'
+              : 'bg-sky-500 hover:bg-sky-600 text-white shadow-sky-200'
+          "
+        >
+          <span>{{
+            isUltimaPergunta ? 'Ver Resumo' : 'Próxima Pergunta'
+          }}</span>
+          <i
+            :class="
+              isUltimaPergunta ? 'pi pi-check-circle' : 'pi pi-arrow-right'
+            "
+            class="text-sm"
+          ></i>
+        </button>
+      </div>
+    </template>
+
+    <template v-else-if="etapa === 4">
+      <div
+        class="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-lg shadow-emerald-200/50"
+      >
+        <div class="flex items-center gap-3 mb-1">
+          <i class="pi pi-check-circle text-2xl text-emerald-200"></i>
+          <h2 class="text-xl font-bold">Avaliação Concluída!</h2>
+        </div>
+        <p class="text-emerald-100 text-sm">
+          {{ alunosSelecionadosLista.length }} aluno(s) ·
+          {{ totalPerguntas }} habilidade(s) · revise antes de salvar.
+        </p>
       </div>
 
       <div class="space-y-3">
         <div
-          v-for="aluno in alunos"
-          :key="aluno.uuid"
-          class="bg-white rounded-xl border shadow-sm overflow-hidden transition-all"
-          :class="
-            alunoExpandido === aluno.uuid
-              ? 'border-sky-200 ring-1 ring-sky-100'
-              : 'border-slate-100'
-          "
+          v-for="item in resultado"
+          :key="item.aluno.uuid"
+          class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5"
         >
-          <div
-            class="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-slate-50 transition-colors select-none"
-            @click="
-              alunoExpandido = alunoExpandido === aluno.uuid ? null : aluno.uuid
-            "
-          >
-            <div class="flex items-center gap-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
               <div
-                class="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0"
+                class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0"
                 :class="
-                  pontuacao(aluno.uuid) > 0
-                    ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white'
-                    : 'bg-slate-100 text-slate-500'
+                  item.pct >= 70
+                    ? 'bg-gradient-to-br from-emerald-400 to-emerald-600'
+                    : item.pct >= 40
+                      ? 'bg-gradient-to-br from-amber-400 to-amber-500'
+                      : 'bg-gradient-to-br from-red-400 to-red-500'
                 "
               >
-                {{ iniciais(aluno.nome) }}
+                {{ iniciais(item.aluno.nome) }}
               </div>
               <div>
-                <p class="font-semibold text-slate-800 text-sm">
-                  {{ aluno.nome }}
+                <p class="font-bold text-slate-800 text-sm">
+                  {{ item.aluno.nome }}
                 </p>
-                <div class="flex items-center gap-2 mt-0.5 flex-wrap">
-                  <span
-                    v-if="getNivelNome(aluno)"
-                    class="text-xs px-2 py-0.5 rounded-full font-medium text-white"
-                    :style="getCorTouca(aluno.nivelAtual?.corTouca)"
-                    :class="!aluno.nivelAtual?.corTouca ? 'bg-sky-500' : ''"
-                  >
-                    {{ getNivelNome(aluno) }}
-                  </span>
-                  <span
-                    v-if="pontuacao(aluno.uuid) > 0"
-                    class="text-xs text-emerald-600 font-medium"
-                  >
-                    ✓ {{ pontuacao(aluno.uuid) }}/{{ habilidades.length }} —
-                    {{ percentual(aluno.uuid) }}%
-                  </span>
-                  <span
-                    v-if="avaliacoes[aluno.uuid]?.promover"
-                    class="text-xs bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full"
-                  >
-                    🏆 Promover
-                  </span>
-                </div>
+                <p class="text-xs text-slate-400 mt-0.5">
+                  {{ getNivelNome(item.aluno) }}
+                </p>
               </div>
             </div>
-
-            <div class="flex items-center gap-2 shrink-0">
-              <Button
-                icon="pi pi-history"
-                text
-                rounded
-                size="small"
-                severity="secondary"
-                v-tooltip.top="'Histórico e envio WhatsApp'"
-                @click.stop="abrirHistorico(aluno)"
-              />
-              <i
-                class="pi text-slate-400 transition-transform duration-200"
+            <div class="text-right">
+              <p
+                class="text-2xl font-extrabold"
                 :class="
-                  alunoExpandido === aluno.uuid
-                    ? 'pi-angle-up'
-                    : 'pi-angle-down'
+                  item.pct >= 70
+                    ? 'text-emerald-600'
+                    : item.pct >= 40
+                      ? 'text-amber-500'
+                      : 'text-red-500'
                 "
-              ></i>
+              >
+                {{ item.pct }}%
+              </p>
+              <p class="text-xs text-slate-400">
+                {{ item.aprovadas }}/{{ item.total }}
+              </p>
             </div>
           </div>
 
-          <div
-            v-if="alunoExpandido === aluno.uuid"
-            class="border-t border-slate-100 px-5 py-5"
-          >
+          <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3">
             <div
-              v-if="habilidades.length === 0"
-              class="text-center py-8 text-slate-400"
+              class="h-full rounded-full"
+              :class="
+                item.pct >= 70
+                  ? 'bg-emerald-500'
+                  : item.pct >= 40
+                    ? 'bg-amber-500'
+                    : 'bg-red-400'
+              "
+              :style="{ width: `${item.pct}%` }"
+            ></div>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5">
+            <span
+              v-for="hab in habilidadesAtivas"
+              :key="hab.uuid"
+              class="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+              :class="
+                respostas[hab.uuid]?.[item.aluno.uuid] === true
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : respostas[hab.uuid]?.[item.aluno.uuid] === false
+                    ? 'bg-red-100 text-red-600'
+                    : 'bg-slate-100 text-slate-400'
+              "
+              :title="hab.descricao"
             >
-              <i class="pi pi-info-circle text-2xl mb-2 block"></i>
-              Nenhuma habilidade cadastrada para este nível.
-            </div>
-
-            <template v-else>
-              <div class="flex items-center gap-2 mb-5">
-                <button
-                  @click="marcarTodas(aluno.uuid)"
-                  class="text-xs font-semibold text-emerald-700 border border-emerald-200 rounded-lg px-3 py-1.5 hover:bg-emerald-50 transition-colors"
-                >
-                  ✓ Marcar todas
-                </button>
-                <button
-                  @click="limpar(aluno.uuid)"
-                  class="text-xs font-semibold text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 transition-colors"
-                >
-                  ✕ Limpar
-                </button>
-                <span class="text-xs text-slate-400 ml-auto">
-                  {{ pontuacao(aluno.uuid) }}/{{ habilidades.length }} marcadas
-                </span>
-              </div>
-
-              <div class="space-y-5">
-                <div
-                  v-for="(habs, categoria) in habilidadesPorCategoria"
-                  :key="categoria"
-                >
-                  <p
-                    class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2"
-                  >
-                    <i class="pi pi-tag mr-1"></i>{{ categoria }}
-                  </p>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <div
-                      v-for="hab in habs"
-                      :key="hab.uuid"
-                      class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all select-none"
-                      :class="
-                        isMarcada(aluno.uuid, hab.uuid)
-                          ? 'bg-emerald-50 border-emerald-300'
-                          : 'bg-slate-50 border-slate-200 hover:border-sky-200 hover:bg-sky-50'
-                      "
-                      @click="toggleHabilidade(aluno.uuid, hab.uuid)"
-                    >
-                      <div
-                        class="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5 border-2 transition-all"
-                        :class="
-                          isMarcada(aluno.uuid, hab.uuid)
-                            ? 'bg-emerald-500 border-emerald-500'
-                            : 'border-slate-300 bg-white'
-                        "
-                      >
-                        <i
-                          v-if="isMarcada(aluno.uuid, hab.uuid)"
-                          class="pi pi-check text-white"
-                          style="font-size: 0.6rem"
-                        ></i>
-                      </div>
-                      <span
-                        class="text-sm leading-snug"
-                        :class="
-                          isMarcada(aluno.uuid, hab.uuid)
-                            ? 'text-emerald-800 font-medium'
-                            : 'text-slate-600'
-                        "
-                        >{{ hab.descricao }}</span
-                      >
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Feedback + Promoção -->
-              <div class="mt-6 pt-5 border-t border-slate-100 space-y-4">
-                <div>
-                  <label
-                    class="block text-sm font-semibold text-slate-700 mb-1.5"
-                  >
-                    <i class="pi pi-comment mr-1 text-slate-400"></i>Feedback do
-                    Professor
-                  </label>
-                  <Textarea
-                    v-model="avaliacoes[aluno.uuid]!.observacao"
-                    placeholder="Observações sobre o desempenho nesta avaliação..."
-                    :rows="3"
-                    class="w-full text-sm"
-                  />
-                </div>
-
-                <div
-                  class="flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all select-none"
-                  :class="
-                    avaliacoes[aluno.uuid]?.promover
-                      ? 'bg-amber-50 border-amber-300'
-                      : 'bg-slate-50 border-slate-200 hover:border-amber-200'
-                  "
-                  @click="togglePromover(aluno.uuid)"
-                >
-                  <div
-                    class="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5 border-2 transition-all"
-                    :class="
-                      avaliacoes[aluno.uuid]?.promover
-                        ? 'bg-amber-500 border-amber-500'
-                        : 'border-slate-300 bg-white'
-                    "
-                  >
-                    <i
-                      v-if="avaliacoes[aluno.uuid]?.promover"
-                      class="pi pi-check text-white"
-                      style="font-size: 0.6rem"
-                    ></i>
-                  </div>
-                  <div>
-                    <p class="text-sm font-semibold text-slate-700">
-                      🏆 Promover para o próximo nível
-                    </p>
-                    <p class="text-xs text-slate-400 mt-0.5">
-                      O aluno será movido para a próxima touca ao salvar a
-                      avaliação.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </template>
+              {{
+                respostas[hab.uuid]?.[item.aluno.uuid] === true
+                  ? '✓'
+                  : respostas[hab.uuid]?.[item.aluno.uuid] === false
+                    ? '✗'
+                    : '–'
+              }}
+              {{
+                hab.descricao.length > 24
+                  ? hab.descricao.slice(0, 24) + '…'
+                  : hab.descricao
+              }}
+            </span>
           </div>
         </div>
       </div>
 
-      <!-- Botão salvar -->
-      <div class="flex justify-end pt-2 pb-4">
-        <Button
-          label="Salvar Avaliações"
-          icon="pi pi-check"
-          size="large"
-          :loading="salvando"
-          :disabled="totalAvaliados === 0"
+      <div class="flex gap-3 pt-1">
+        <button
+          @click="revisar"
+          class="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl border-2 border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all"
+        >
+          <i class="pi pi-pencil text-sm"></i> Revisar
+        </button>
+        <button
           @click="salvarAvaliacao"
-        />
+          :disabled="salvando"
+          class="flex-[2] flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold px-6 py-3.5 rounded-xl transition-all shadow-sm shadow-emerald-200 active:scale-95"
+        >
+          <i v-if="salvando" class="pi pi-spin pi-spinner text-sm"></i>
+          <i v-else class="pi pi-check text-sm"></i>
+          {{ salvando ? 'Salvando...' : 'Salvar Avaliação' }}
+        </button>
       </div>
     </template>
 
-    <!-- ── Modal Histórico + WhatsApp ────────────────────────────────── -->
-    <Dialog v-model:visible="modalHistorico" modal :style="{ width: '38rem' }">
+    <Dialog v-model:visible="modalHistorico" modal :style="{ width: '36rem' }">
       <template #header>
-        <div class="flex flex-col">
+        <div>
           <h3 class="font-bold text-slate-800 text-lg">
             Histórico de Avaliações
           </h3>
-          <div class="flex items-center gap-3 mt-1 flex-wrap">
-            <span class="text-sm text-slate-500">
-              <i class="pi pi-user mr-1"></i>{{ alunoModal?.nome }}
-            </span>
-            <span
-              v-if="getTelefone(alunoModal)"
-              class="text-sm text-emerald-600 font-medium"
-            >
-              <i class="pi pi-whatsapp mr-1"></i>{{ getTelefone(alunoModal) }}
-            </span>
-            <span v-else class="text-xs text-amber-600 font-medium">
-              <i class="pi pi-exclamation-triangle mr-1"></i>Sem telefone
-              cadastrado
-            </span>
-          </div>
+          <p class="text-sm text-slate-400 mt-0.5">
+            <i class="pi pi-user mr-1"></i>{{ alunoModal?.nome }}
+          </p>
         </div>
       </template>
 
-      <!-- Loading -->
       <div v-if="loadingHistorico" class="flex justify-center py-10">
         <i class="pi pi-spin pi-spinner text-3xl text-sky-400"></i>
       </div>
 
-      <!-- Sem histórico -->
       <div v-else-if="historico.length === 0" class="text-center py-10">
         <i class="pi pi-inbox text-5xl text-slate-200 mb-3 block"></i>
         <p class="text-slate-400 font-medium">
@@ -720,15 +1039,13 @@ function iniciais(nome: string) {
         </p>
       </div>
 
-      <!-- Lista -->
       <div v-else class="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
         <div
           v-for="hist in historico"
           :key="hist.uuid"
-          class="border border-slate-100 rounded-xl p-4 bg-slate-50 hover:bg-white transition-colors"
+          class="border border-slate-100 rounded-xl p-4 bg-slate-50"
         >
           <div class="flex items-start justify-between gap-4">
-            <!-- Info da avaliação -->
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap mb-2">
                 <span
@@ -741,26 +1058,17 @@ function iniciais(nome: string) {
                 <span
                   v-if="hist.promovido"
                   class="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"
-                  >🏆 Promovido</span
                 >
+                  🏆 Promovido
+                </span>
               </div>
-
               <p class="text-xs text-slate-500">
-                <i class="pi pi-calendar mr-1"></i
-                >{{ formatarData(hist.dataAvaliacao) }}
+                <i class="pi pi-calendar mr-1"></i>
+                {{ formatarData(hist.dataAvaliacao) }}
                 <span class="mx-2 text-slate-300">·</span>
-                <i class="pi pi-star mr-1"></i
-                >{{ hist.pontuacaoTotal }} habilidade(s) aprovada(s)
-              </p>
-
-              <p
-                v-if="hist.observacoes"
-                class="text-xs text-slate-500 mt-2 italic line-clamp-2 bg-white border border-slate-100 rounded-lg px-3 py-2"
-              >
-                "{{ hist.observacoes }}"
+                {{ hist.pontuacaoTotal }} habilidade(s) aprovada(s)
               </p>
             </div>
-
             <div class="flex flex-col gap-2 shrink-0">
               <Button
                 icon="pi pi-file-pdf"
@@ -769,7 +1077,6 @@ function iniciais(nome: string) {
                 severity="secondary"
                 outlined
                 :loading="baixandoPdf[hist.uuid]"
-                v-tooltip.left="'Baixar relatório em PDF'"
                 @click="baixarPdf(hist)"
               />
               <Button
@@ -777,29 +1084,12 @@ function iniciais(nome: string) {
                 label="Enviar"
                 size="small"
                 severity="success"
-                :loading="enviandoWhatsApp[hist.uuid]"
-                :disabled="!getTelefone(alunoModal)"
-                v-tooltip.left="
-                  getTelefone(alunoModal)
-                    ? `Enviar para ${getTelefone(alunoModal)}`
-                    : 'Sem telefone cadastrado'
-                "
+                :loading="enviandoWA[hist.uuid]"
                 @click="enviarWhatsApp(hist)"
               />
             </div>
           </div>
         </div>
-      </div>
-
-      <div
-        v-if="alunoModal && !getTelefone(alunoModal) && historico.length > 0"
-        class="mt-4 bg-amber-50 border border-amber-100 rounded-xl p-3 flex items-start gap-2 text-xs text-amber-700"
-      >
-        <i class="pi pi-exclamation-triangle mt-0.5 shrink-0"></i>
-        <span>
-          Este aluno não tem telefone do responsável cadastrado. Para habilitar
-          o envio por WhatsApp, edite o cadastro do aluno e adicione o telefone.
-        </span>
       </div>
     </Dialog>
   </div>
