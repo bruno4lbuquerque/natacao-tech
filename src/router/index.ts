@@ -52,7 +52,15 @@ const router = createRouter({
             allowedRoles: ['ADMIN', 'DIRETOR', 'COORDENADOR'],
           },
         },
-        { path: 'reports', name: 'reports', component: ReportsView },
+        {
+          path: 'reports',
+          name: 'reports',
+          component: ReportsView,
+          meta: {
+            requiresAuth: true,
+            allowedRoles: ['DIRETOR', 'COORDENADOR', 'PROFESSOR'],
+          },
+        },
         { path: 'classes', name: 'classes', component: ClassesView },
         {
           path: 'perfil',

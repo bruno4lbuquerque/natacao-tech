@@ -29,12 +29,14 @@ onMounted(() => {
 })
 
 // CORREÇÃO AQUI: s.nome e s.uuid em vez de s.name e s.id
-const studentOptions = computed(() =>
-  studentsStore.students.map((s: any) => ({
-    label: s.nome,
-    value: s.uuid,
+const studentOptions = computed(() => {
+  if (!Array.isArray(studentsStore.students)) return []
+
+  return studentsStore.students.map((s: any) => ({
+    label: s.name,
+    value: s.id,
   }))
-)
+})
 
 async function fetchHistory() {
   if (!selectedStudent.value) return

@@ -22,7 +22,13 @@ export const useStudentsStore = defineStore('students', () => {
     loading.value = true
     try {
       const response = await api.get('/api/alunos')
-      students.value = response.data.map((a: any) => ({
+      const data = response.data?.content || response.data || []
+      if (!Array.isArray(data)) {
+        students.value = []
+        return
+      }
+
+      students.value = data.map((a: any) => ({
         id: a.uuid,
         name: a.nome,
         age: a.idade ?? 0,
@@ -35,6 +41,7 @@ export const useStudentsStore = defineStore('students', () => {
       }))
     } catch (error) {
       console.error('Erro ao buscar alunos:', error)
+      students.value = []
     } finally {
       loading.value = false
     }

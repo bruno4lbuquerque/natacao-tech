@@ -11,12 +11,23 @@ const isDiretorOuAcima = computed(() =>
   ['ADMIN', 'DIRETOR', 'COORDENADOR'].includes(auth.role ?? '')
 )
 
-const menuItems = [
-  { label: 'Dashboard', icon: 'pi pi-home', route: '/' },
-  { label: 'Turmas', icon: 'pi pi-calendar', route: '/classes' },
-  { label: 'Avaliações', icon: 'pi pi-check-square', route: '/assessments' },
-  { label: 'Relatórios', icon: 'pi pi-chart-bar', route: '/reports' },
-]
+const menuItems = computed(() => {
+  const items = [
+    { label: 'Dashboard', icon: 'pi pi-home', route: '/' },
+    { label: 'Turmas', icon: 'pi pi-calendar', route: '/classes' },
+    { label: 'Avaliações', icon: 'pi pi-check-square', route: '/assessments' },
+  ]
+
+  if (['DIRETOR', 'COORDENADOR', 'PROFESSOR'].includes(auth.role ?? '')) {
+    items.push({
+      label: 'Relatórios',
+      icon: 'pi pi-chart-bar',
+      route: '/reports',
+    })
+  }
+
+  return items
+})
 
 const iniciais = computed((): string => {
   const raw: string = auth.user ?? ''
