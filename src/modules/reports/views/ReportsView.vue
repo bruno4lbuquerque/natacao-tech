@@ -33,8 +33,8 @@ const studentOptions = computed(() => {
   if (!Array.isArray(studentsStore.students)) return []
 
   return studentsStore.students.map((s: any) => ({
-    label: s.nome,
-    value: s.uuid,
+    label: s.nome || s.name || 'Aluno Indefinido',
+    value: s.uuid || s.id,
   }))
 })
 
