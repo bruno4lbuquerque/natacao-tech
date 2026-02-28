@@ -157,6 +157,21 @@
 
         <div class="flex flex-col gap-2">
           <label class="font-bold text-sm text-gray-700"
+            >Professor Responsável <span class="text-red-500">*</span></label
+          >
+          <Select
+            v-model="form.professorId"
+            :options="professores"
+            optionLabel="nome"
+            optionValue="uuid"
+            placeholder="Selecione um professor"
+            class="w-full"
+            filter
+          />
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <label class="font-bold text-sm text-gray-700"
             >Dias da Semana <span class="text-red-500">*</span></label
           >
           <MultiSelect
@@ -251,6 +266,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 
+import api from '@/core/services/api'
 import { useClassesStore } from '@/modules/classes/stores/classes'
 import { useStudentsStore } from '@/modules/students/stores/students'
 import { useLevelsStore } from '@/modules/levels/stores/levels'
@@ -277,6 +293,7 @@ const showStudentsModal = ref(false)
 const submitting = ref(false)
 const searchQuery = ref('')
 const selectedClass = ref<any>(null)
+const professores = ref([])
 
 const form = ref({
   nome: '',
@@ -296,8 +313,21 @@ const weekDays = [
   { label: 'Sábado', value: 'SABADO' },
 ]
 
+const carregarProfessores = async () => {
+  try {
+    const { data } = await api.get('/api/professores')
+    professores.value = data
+  } catch (error) {
+    console.error('Erro ao buscar professores', error)
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([classesStore.fetchClasses(), levelsStore.fetchLevels()])
+  await Promise.all([
+    classesStore.fetchClasses(),
+    levelsStore.fetchLevels(),
+    carregarProfessores(),
+  ])
 })
 
 const filteredClasses = computed(() => {
@@ -306,7 +336,8 @@ const filteredClasses = computed(() => {
   return classesStore.classes.filter(
     (c: any) =>
       (c.nome ?? '').toLowerCase().includes(lower) ||
-      (c.nivelAlvo?.nome?.toLowerCase().includes(lower) ?? false)
+      (c.nivelAlvo?.nome?.toLowerCase().includes(lower) ?? false) ||
+      (c.professor?.nome?.toLowerCase().includes(lower) ?? false)
   )
 })
 
@@ -378,7 +409,8 @@ async function saveClass() {
     !form.value.horarioInicio ||
     !form.value.horarioFim ||
     form.value.diasSemana.length === 0 ||
-    !form.value.nivelAlvoId
+    !form.value.nivelAlvoId ||
+    !form.value.professorId
   ) {
     return toast.add({
       severity: 'warn',
@@ -401,11 +433,7 @@ async function saveClass() {
           : form.value.horarioFim,
       diasSemana: form.value.diasSemana,
       nivelAlvoId: form.value.nivelAlvoId,
-    }
-
-    // Envia professorId APENAS se tiver um valor selecionado
-    if (form.value.professorId) {
-      payload.professorId = form.value.professorId
+      professorId: form.value.professorId,
     }
 
     const res = await classesStore.createClass(payload)

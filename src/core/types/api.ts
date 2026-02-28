@@ -28,8 +28,8 @@ export interface CadastroTurmaDTO {
   horarioInicio: string
   horarioFim: string
   diasSemana: string[]
-  nivelAlvoId: string | null
-  professorId?: string | null
+  nivelAlvoId: string
+  professorId: string
 }
 
 export interface HabilidadeDTO {
