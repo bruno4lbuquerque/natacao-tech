@@ -97,101 +97,121 @@ async function handleLogin() {
 
 <template>
   <div
-    class="min-h-screen w-full flex items-center justify-center bg-gray-50 relative overflow-hidden"
+    class="min-h-screen w-full flex items-center justify-center bg-slate-50 relative overflow-hidden font-sans p-4"
   >
     <Toast />
 
     <div
-      class="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-brand-50 to-blue-100 z-0"
+      class="absolute inset-0 bg-gradient-to-br from-sky-50 via-slate-50 to-blue-100 z-0"
     ></div>
     <div
-      class="absolute -top-20 -right-20 w-96 h-96 bg-brand-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"
+      class="absolute -top-32 -right-32 w-96 h-96 bg-sky-300 rounded-full mix-blend-multiply filter blur-[100px] opacity-40 animate-blob z-0"
     ></div>
     <div
-      class="absolute -bottom-20 -left-20 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"
+      class="absolute -bottom-32 -left-32 w-96 h-96 bg-blue-400 rounded-full mix-blend-multiply filter blur-[100px] opacity-40 animate-blob animation-delay-2000 z-0"
+    ></div>
+    <div
+      class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[30rem] h-[30rem] bg-cyan-200 rounded-full mix-blend-multiply filter blur-[120px] opacity-30 animate-blob animation-delay-4000 z-0"
     ></div>
 
     <div
-      class="bg-white/80 backdrop-blur-xl border border-white/20 p-8 md:p-12 rounded-3xl shadow-2xl w-full max-w-lg z-10 relative"
+      class="bg-white/90 backdrop-blur-xl border border-white shadow-2xl p-8 md:p-12 rounded-[2rem] w-full max-w-[28rem] z-10 relative"
     >
-      <div class="text-center mb-10">
+      <div class="text-center mb-8">
         <img
           src="/images/acquOnwhite.jpeg"
           alt="AcquOn Logo"
-          class="h-48 mx-auto mb-6 object-contain"
+          class="h-32 md:h-40 mx-auto mb-6 object-contain drop-shadow-sm"
         />
-        <p class="text-gray-500 mt-2 text-sm">
-          Faça login para gerenciar suas turmas
+        <h1
+          class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight"
+        >
+          Bem-vindo(a) de volta
+        </h1>
+        <p class="text-slate-500 text-sm mt-2">
+          Faça login para gerenciar suas turmas e alunos
         </p>
       </div>
 
-      <Message
-        v-if="errorMessage"
-        severity="error"
-        :closable="false"
-        class="mb-6"
-      >
-        {{ errorMessage }}
-      </Message>
-
-      <Message v-if="bloqueado" severity="warn" :closable="false" class="mb-4">
-        <i class="pi pi-clock mr-2"></i>{{ cooldownLabel }}
-      </Message>
+      <transition-group name="fade" tag="div" class="space-y-3 mb-6">
+        <Message
+          v-if="errorMessage"
+          severity="error"
+          :closable="false"
+          key="error"
+        >
+          {{ errorMessage }}
+        </Message>
+        <Message
+          v-if="bloqueado"
+          severity="warn"
+          :closable="false"
+          key="cooldown"
+        >
+          <i class="pi pi-clock mr-2"></i>{{ cooldownLabel }}
+        </Message>
+      </transition-group>
 
       <form @submit.prevent="handleLogin" class="space-y-6" autocomplete="on">
-        <FloatLabel>
+        <FloatLabel class="w-full">
           <InputText
             id="email"
             v-model="email"
             type="email"
             autocomplete="email"
-            class="w-full p-3 bg-white/50 border-gray-200 focus:border-brand-500 focus:ring-0"
+            class="w-full p-3.5 bg-slate-50 border-slate-200 hover:border-sky-300 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl transition-all text-slate-700"
             :disabled="authStore.loading || bloqueado"
           />
-          <label for="email">E-mail Corporativo</label>
+          <label for="email" class="text-slate-500 ml-1"
+            >E-mail Corporativo</label
+          >
         </FloatLabel>
 
-        <FloatLabel>
+        <FloatLabel class="w-full">
           <Password
             id="password"
             v-model="password"
             :feedback="false"
             toggleMask
             autocomplete="current-password"
-            inputClass="w-full p-3 bg-white/50 border-gray-200 focus:border-brand-500 focus:ring-0"
-            class="w-full"
+            inputClass="w-full p-3.5 bg-slate-50 border-slate-200 hover:border-sky-300 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl transition-all text-slate-700"
+            class="w-full custom-password"
             :disabled="authStore.loading || bloqueado"
           />
-          <label for="password">Sua Senha</label>
+          <label for="password" class="text-slate-500 ml-1">Sua Senha</label>
         </FloatLabel>
 
-        <div
-          class="flex items-center justify-between text-sm text-gray-500 px-1"
-        >
-          <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between text-sm px-1">
+          <div class="flex items-center gap-2.5 cursor-pointer group">
             <input
               type="checkbox"
               id="remember"
-              class="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              class="w-4 h-4 rounded border-slate-300 text-sky-500 focus:ring-sky-500 transition-all cursor-pointer"
             />
-            <label for="remember">Lembrar-me</label>
+            <label
+              for="remember"
+              class="text-slate-500 group-hover:text-slate-700 transition-colors cursor-pointer"
+              >Lembrar-me</label
+            >
           </div>
-          <a href="#" class="hover:text-brand-600 font-medium transition-colors"
-            >Esqueceu a senha?</a
-          >
+          <a href="#" class="text-sky-600 hover:text-sky-700 transition-colors">
+            Esqueceu a senha?
+          </a>
         </div>
 
         <Button
           type="submit"
           :label="botaoLabel"
-          class="w-full p-4 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white font-bold rounded-xl shadow-lg shadow-brand-200 transform transition-all active:scale-95 text-lg"
+          class="w-full p-4 mt-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-medium text-base rounded-xl shadow-lg shadow-sky-200 hover:shadow-sky-300 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 border-none"
           :loading="authStore.loading"
           :disabled="bloqueado"
         />
       </form>
 
-      <p class="text-center text-xs text-gray-400 mt-8">
-        &copy; 2026 AcquOn Systems. v1.0.0
+      <p
+        class="text-center text-xs text-slate-400 tracking-wider uppercase mt-8"
+      >
+        &copy; 2026 AcquOn Systems
       </p>
     </div>
   </div>
@@ -199,11 +219,15 @@ async function handleLogin() {
 
 <style scoped>
 .animate-blob {
-  animation: blob 7s infinite;
+  animation: blob 8s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
 }
 .animation-delay-2000 {
   animation-delay: 2s;
 }
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
 @keyframes blob {
   0% {
     transform: translate(0px, 0px) scale(1);
@@ -217,5 +241,32 @@ async function handleLogin() {
   100% {
     transform: translate(0px, 0px) scale(1);
   }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+:deep(.custom-password .p-password-mask-icon) {
+  right: 1rem;
+  color: #94a3b8;
+  transition: color 0.2s;
+}
+:deep(.custom-password .p-password-mask-icon:hover) {
+  color: #0ea5e9;
+}
+
+:deep(.p-floatlabel:has(input:focus) label),
+:deep(.p-floatlabel:has(input.p-filled) label) {
+  background-color: transparent !important;
+  color: #0ea5e9 !important;
 }
 </style>
