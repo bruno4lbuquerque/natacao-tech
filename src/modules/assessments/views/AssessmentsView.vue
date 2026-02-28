@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import api from '@/core/services/api'
+import { useAssessmentsStore } from '@/modules/assessments/stores/assessments'
 
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
@@ -10,6 +11,7 @@ import ConfirmDialog from 'primevue/confirmdialog'
 
 const toast = useToast()
 const confirm = useConfirm()
+const assessmentsStore = useAssessmentsStore()
 
 interface NivelResumo {
   uuid: string
@@ -356,17 +358,9 @@ async function abrirHistorico(aluno: Aluno) {
 async function baixarPdf(hist: Historico) {
   baixandoPdf.value[hist.uuid] = true
   try {
-    const response = await api.get(`/api/avaliacoes/${hist.uuid}/pdf`, {
-      responseType: 'blob',
-    })
-    const url = URL.createObjectURL(
-      new Blob([response.data], { type: 'application/pdf' })
-    )
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `avaliacao_${(alunoModal.value?.nome ?? 'relatorio').replace(/ /g, '_')}.pdf`
-    a.click()
-    URL.revokeObjectURL(url)
+    if (assessmentsStore.downloadAvaliacaoPdf) {
+      await assessmentsStore.downloadAvaliacaoPdf(hist.uuid)
+    }
     toast.add({ severity: 'success', summary: 'PDF baixado!', life: 3000 })
   } catch {
     toast.add({

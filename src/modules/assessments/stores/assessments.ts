@@ -20,6 +20,24 @@ export const useAssessmentsStore = defineStore('assessments', () => {
     }
   }
 
+  async function downloadAvaliacaoPdf(historicoUuid: string) {
+    try {
+      const response = await api.get(`/api/avaliacoes/${historicoUuid}/pdf`, {
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `avaliacao-${historicoUuid}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (error) {
+      console.error('Erro ao baixar PDF:', error)
+      throw error
+    }
+  }
+
   async function submitEvaluation(turmaUuid: string, evaluations: any[]) {
     loading.value = true
     try {
@@ -49,5 +67,6 @@ export const useAssessmentsStore = defineStore('assessments', () => {
     loading,
     fetchSkills,
     submitEvaluation,
+    downloadAvaliacaoPdf,
   }
 })

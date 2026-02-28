@@ -91,7 +91,7 @@
           <div class="flex items-center justify-between text-sm text-gray-600">
             <span class="flex items-center gap-2">
               <i class="pi pi-users text-slate-400"></i>
-              {{ getStudentCount(turma.uuid) }} alunos matriculados
+              {{ turma.quantidadeAlunos ?? 0 }} alunos matriculados
             </span>
             <Button
               icon="pi pi-trash"
@@ -120,7 +120,6 @@
           >
           <InputText v-model="form.nome" placeholder="Ex: Baby Manhã A" />
         </div>
-
         <div class="grid grid-cols-2 gap-4">
           <div class="flex flex-col gap-2">
             <label class="font-bold text-sm text-gray-700"
@@ -139,7 +138,6 @@
             <InputText v-model="form.horarioFim" type="time" class="w-full" />
           </div>
         </div>
-
         <div class="flex flex-col gap-2">
           <label class="font-bold text-sm text-gray-700"
             >Nível Alvo <span class="text-red-500">*</span></label
@@ -154,7 +152,6 @@
             filter
           />
         </div>
-
         <div class="flex flex-col gap-2">
           <label class="font-bold text-sm text-gray-700"
             >Professor Responsável <span class="text-red-500">*</span></label
@@ -169,7 +166,6 @@
             filter
           />
         </div>
-
         <div class="flex flex-col gap-2">
           <label class="font-bold text-sm text-gray-700"
             >Dias da Semana <span class="text-red-500">*</span></label
@@ -184,7 +180,6 @@
             class="w-full"
           />
         </div>
-
         <div class="flex justify-end gap-2 mt-2 pt-4 border-t border-gray-100">
           <Button
             label="Cancelar"
@@ -205,57 +200,121 @@
     <Dialog
       v-model:visible="showStudentsModal"
       modal
-      header="Alunos Matriculados"
-      :style="{ width: '36rem' }"
+      header="Gerenciar Turma"
+      :style="{ width: '40rem' }"
     >
-      <div v-if="selectedClass" class="flex flex-col gap-4 pt-2">
-        <div class="bg-slate-50 border border-slate-100 rounded-lg p-4">
-          <p class="text-sm text-gray-500">
-            Turma:
-            <strong class="text-gray-800">{{ selectedClass.nome }}</strong> ({{
-              formatarHorario(selectedClass.horarioInicio)
-            }})
-          </p>
+      <div v-if="selectedClass" class="flex flex-col gap-5 pt-2">
+        <div
+          class="bg-slate-50 border border-slate-100 rounded-lg p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+        >
+          <div>
+            <p class="text-sm text-gray-500">
+              Turma:
+              <strong class="text-gray-800">{{ selectedClass.nome }}</strong>
+              ({{ formatarHorario(selectedClass.horarioInicio) }})
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-gray-600">Professor:</span>
+            <Select
+              :modelValue="selectedClass.professor?.uuid"
+              @update:modelValue="(val) => atualizarProfessor(val)"
+              :options="professores"
+              optionLabel="nome"
+              optionValue="uuid"
+              placeholder="Alterar Professor"
+              class="w-48 text-sm"
+            />
+          </div>
         </div>
 
         <div
-          v-if="classStudents.length === 0"
-          class="text-center py-8 text-gray-500"
+          class="flex gap-2 items-center bg-sky-50 p-3 rounded-lg border border-sky-100"
         >
-          <i class="pi pi-users text-3xl mb-2 text-slate-300 block"></i>
-          Nenhum aluno matriculado nesta turma ainda.
+          <Select
+            v-model="alunoSelecionado"
+            :options="alunosSemTurma"
+            optionLabel="nome"
+            optionValue="uuid"
+            placeholder="Selecione um aluno sem turma..."
+            class="flex-1"
+            filter
+          />
+          <Button
+            label="Matricular"
+            icon="pi pi-user-plus"
+            @click="matricular()"
+            :disabled="!alunoSelecionado"
+          />
         </div>
 
-        <ul
-          v-else
-          class="divide-y divide-gray-100 max-h-96 overflow-y-auto pr-2"
-        >
-          <li
-            v-for="student in classStudents"
-            :key="student.id"
-            class="py-3 flex justify-between items-center"
+        <div>
+          <h4 class="font-bold text-gray-700 text-sm mb-3 border-b pb-2">
+            Alunos Matriculados ({{ classStudents.length }})
+          </h4>
+
+          <div v-if="loadingClassStudents" class="flex justify-center py-6">
+            <i class="pi pi-spin pi-spinner text-2xl text-sky-400"></i>
+          </div>
+
+          <div
+            v-else-if="classStudents.length === 0"
+            class="text-center py-6 text-gray-500"
           >
-            <div class="flex items-center">
-              <div
-                class="w-10 h-10 bg-sky-100 text-sky-700 rounded-full flex items-center justify-center font-bold mr-4"
-              >
-                {{ student.name.charAt(0).toUpperCase() }}
+            <i class="pi pi-users text-3xl mb-2 text-slate-300 block"></i>
+            Nenhum aluno matriculado nesta turma ainda.
+          </div>
+
+          <ul
+            v-else
+            class="divide-y divide-gray-100 max-h-96 overflow-y-auto pr-2"
+          >
+            <li
+              v-for="student in classStudents"
+              :key="student.uuid"
+              class="py-3 flex flex-col sm:flex-row justify-between sm:items-center gap-3"
+            >
+              <div class="flex items-center">
+                <div
+                  class="w-10 h-10 bg-sky-100 text-sky-700 rounded-full flex items-center justify-center font-bold mr-4 shrink-0"
+                >
+                  {{ student.nome.charAt(0).toUpperCase() }}
+                </div>
+                <div>
+                  <p class="text-sm font-semibold text-gray-900">
+                    {{ student.nome }}
+                  </p>
+                  <p class="text-xs text-gray-500 mt-0.5">
+                    {{ student.nomeResponsavel || 'Sem responsável' }} •
+                    {{ student.telefoneResponsavel || 'Sem contato' }}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p class="text-sm font-semibold text-gray-900">
-                  {{ student.name }}
-                </p>
-                <p class="text-xs text-gray-500 mt-0.5">
-                  {{ student.age }} anos • Contato: {{ student.contact }}
-                </p>
+              <div class="flex items-center gap-2 sm:self-auto self-end">
+                <Select
+                  v-model="transferirTurmaId[student.uuid]"
+                  :options="
+                    classesStore.classes.filter(
+                      (c) => c.uuid !== selectedClass.uuid
+                    )
+                  "
+                  optionLabel="nome"
+                  optionValue="uuid"
+                  placeholder="Transferir para..."
+                  class="w-40 text-xs"
+                />
+                <Button
+                  icon="pi pi-arrow-right-arrow-left"
+                  severity="secondary"
+                  outlined
+                  @click="transferirAluno(student.uuid)"
+                  :disabled="!transferirTurmaId[student.uuid]"
+                  v-tooltip.top="'Transferir'"
+                />
               </div>
-            </div>
-            <Tag
-              :value="student.status === 'active' ? 'Ativo' : 'Inativo'"
-              :severity="student.status === 'active' ? 'success' : 'danger'"
-            />
-          </li>
-        </ul>
+            </li>
+          </ul>
+        </div>
       </div>
     </Dialog>
   </div>
@@ -268,9 +327,9 @@ import { useConfirm } from 'primevue/useconfirm'
 
 import api from '@/core/services/api'
 import { useClassesStore } from '@/modules/classes/stores/classes'
-import { useStudentsStore } from '@/modules/students/stores/students'
 import { useLevelsStore } from '@/modules/levels/stores/levels'
 import { formatDays } from '@/core/utils/formatters'
+import type { AlunoDTO } from '@/core/types/api'
 
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -285,7 +344,6 @@ import ConfirmDialog from 'primevue/confirmdialog'
 const toast = useToast()
 const confirm = useConfirm()
 const classesStore = useClassesStore()
-const studentsStore = useStudentsStore()
 const levelsStore = useLevelsStore()
 
 const showCreateModal = ref(false)
@@ -293,7 +351,16 @@ const showStudentsModal = ref(false)
 const submitting = ref(false)
 const searchQuery = ref('')
 const selectedClass = ref<any>(null)
-const professores = ref([])
+const professores = ref<any[]>([])
+
+// Alunos da turma selecionada (carregados via API)
+const classStudents = ref<AlunoDTO[]>([])
+const loadingClassStudents = ref(false)
+
+// Alunos disponíveis para matrícula
+const alunosSemTurma = ref<any[]>([])
+const alunoSelecionado = ref<string | null>(null)
+const transferirTurmaId = ref<Record<string, string>>({})
 
 const form = ref({
   nome: '',
@@ -322,11 +389,40 @@ const carregarProfessores = async () => {
   }
 }
 
+const carregarAlunosSemTurma = async () => {
+  try {
+    const { data } = await api.get<AlunoDTO[]>('/api/alunos/sem-turma')
+    alunosSemTurma.value = data
+  } catch {
+    // endpoint pode não existir — ignora silenciosamente
+  }
+}
+
+const carregarAlunosDaTurma = async (turmaUuid: string) => {
+  loadingClassStudents.value = true
+  classStudents.value = []
+  try {
+    const { data } = await api.get<AlunoDTO[]>(
+      `/api/turmas/${turmaUuid}/alunos`
+    )
+    classStudents.value = data
+  } catch {
+    toast.add({
+      severity: 'error',
+      summary: 'Erro',
+      detail: 'Falha ao carregar alunos da turma.',
+    })
+  } finally {
+    loadingClassStudents.value = false
+  }
+}
+
 onMounted(async () => {
   await Promise.all([
     classesStore.fetchClasses(),
     levelsStore.fetchLevels(),
     carregarProfessores(),
+    carregarAlunosSemTurma(),
   ])
 })
 
@@ -346,22 +442,12 @@ function formatarHorario(horario: string | null | undefined): string {
   return horario.substring(0, 5)
 }
 
-function getStudentCount(turmaUuid: string) {
-  return studentsStore.students.filter(
-    (s) => s.classIds && s.classIds.includes(turmaUuid)
-  ).length
-}
-
-const classStudents = computed(() => {
-  if (!selectedClass.value) return []
-  return studentsStore.students.filter(
-    (s) => s.classIds && s.classIds.includes(selectedClass.value.uuid)
-  )
-})
-
-function openClassStudentsModal(classItem: any) {
+async function openClassStudentsModal(classItem: any) {
   selectedClass.value = classItem
+  alunoSelecionado.value = null
+  transferirTurmaId.value = {}
   showStudentsModal.value = true
+  await carregarAlunosDaTurma(classItem.uuid)
 }
 
 function openCreateModal() {
@@ -374,6 +460,82 @@ function openCreateModal() {
     professorId: null,
   }
   showCreateModal.value = true
+}
+
+async function matricular() {
+  if (!alunoSelecionado.value || !selectedClass.value) return
+  try {
+    await api.post(`/api/turmas/${selectedClass.value.uuid}/alunos`, {
+      alunoId: alunoSelecionado.value,
+    })
+    await Promise.all([
+      classesStore.fetchClasses(),
+      carregarAlunosDaTurma(selectedClass.value.uuid),
+      carregarAlunosSemTurma(),
+    ])
+    alunoSelecionado.value = null
+    toast.add({
+      severity: 'success',
+      summary: 'Sucesso',
+      detail: 'Aluno matriculado.',
+    })
+  } catch (e: any) {
+    toast.add({
+      severity: 'error',
+      summary: 'Erro',
+      detail: e.response?.data?.message ?? 'Falha ao matricular.',
+    })
+  }
+}
+
+async function transferirAluno(alunoUuid: string) {
+  const novaTurmaUuid = transferirTurmaId.value[alunoUuid]
+  if (!novaTurmaUuid || !selectedClass.value) return
+  try {
+    await api.patch(`/api/alunos/${alunoUuid}/transferencia`, {
+      novasTurmasIds: [novaTurmaUuid],
+    })
+    await Promise.all([
+      classesStore.fetchClasses(),
+      carregarAlunosDaTurma(selectedClass.value.uuid),
+    ])
+    delete transferirTurmaId.value[alunoUuid]
+    toast.add({
+      severity: 'success',
+      summary: 'Sucesso',
+      detail: 'Aluno transferido.',
+    })
+  } catch (e: any) {
+    toast.add({
+      severity: 'error',
+      summary: 'Erro',
+      detail: e.response?.data?.message ?? 'Falha ao transferir.',
+    })
+  }
+}
+
+async function atualizarProfessor(novoProfessorId: string) {
+  if (!selectedClass.value) return
+  try {
+    await api.patch(`/api/turmas/${selectedClass.value.uuid}/professor`, {
+      professorId: novoProfessorId,
+    })
+    await classesStore.fetchClasses()
+    selectedClass.value = classesStore.classes.find(
+      (c) => c.uuid === selectedClass.value.uuid
+    )
+    toast.add({
+      severity: 'success',
+      summary: 'Sucesso',
+      detail: 'Professor atualizado.',
+    })
+  } catch (e: any) {
+    toast.add({
+      severity: 'error',
+      summary: 'Erro',
+      detail: e.response?.data?.message ?? 'Falha ao atualizar professor.',
+    })
+  }
 }
 
 function confirmDelete(turma: any) {
@@ -418,7 +580,6 @@ async function saveClass() {
       detail: 'Preencha todos os campos obrigatórios.',
     })
   }
-
   submitting.value = true
   try {
     const payload: any = {
@@ -435,7 +596,6 @@ async function saveClass() {
       nivelAlvoId: form.value.nivelAlvoId,
       professorId: form.value.professorId,
     }
-
     const res = await classesStore.createClass(payload)
     if (res.success) {
       toast.add({
@@ -451,7 +611,7 @@ async function saveClass() {
         detail: res.error ?? 'Falha ao criar turma.',
       })
     }
-  } catch (error) {
+  } catch {
     toast.add({
       severity: 'error',
       summary: 'Erro',

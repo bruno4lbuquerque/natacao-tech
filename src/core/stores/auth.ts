@@ -127,6 +127,33 @@ export const useAuthStore = defineStore('auth', () => {
     role.value = null
   }
 
+  async function alterarSenha(payload: any) {
+    try {
+      await api.put('/api/usuarios/alterar-senha', payload)
+    } catch (error) {
+      console.error('Erro ao alterar senha:', error)
+      throw error
+    }
+  }
+
+  async function promoverDiretor(uuid: string) {
+    try {
+      await api.patch(`/api/usuarios/${uuid}/promover-diretor`)
+    } catch (error) {
+      console.error('Erro ao promover diretor:', error)
+      throw error
+    }
+  }
+
+  async function rebaixarUsuario(uuid: string) {
+    try {
+      await api.patch(`/api/usuarios/${uuid}/rebaixar-usuario`)
+    } catch (error) {
+      console.error('Erro ao rebaixar usuário:', error)
+      throw error
+    }
+  }
+
   return {
     user,
     token,
@@ -139,5 +166,8 @@ export const useAuthStore = defineStore('auth', () => {
     checkAuth,
     signIn,
     signOut,
+    alterarSenha,
+    promoverDiretor,
+    rebaixarUsuario,
   }
 })

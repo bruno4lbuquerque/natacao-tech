@@ -18,16 +18,19 @@ import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import ConfirmDialog from 'primevue/confirmdialog'
 import Tooltip from 'primevue/tooltip'
+import Menu from 'primevue/menu'
 
 const toast = useToast()
 const confirm = useConfirm()
-const auth = useAuthStore()
+const authStore = useAuthStore()
 const vTooltip = Tooltip
 
-const isAdmin = computed(() => auth.role === 'ADMIN')
-const isDiretor = computed(() => ['ADMIN', 'DIRETOR'].includes(auth.role ?? ''))
+const isAdmin = computed(() => authStore.role === 'ADMIN')
+const isDiretor = computed(() =>
+  ['ADMIN', 'DIRETOR'].includes(authStore.role ?? '')
+)
 const isCoordenador = computed(() =>
-  ['ADMIN', 'DIRETOR', 'COORDENADOR'].includes(auth.role ?? '')
+  ['ADMIN', 'DIRETOR', 'COORDENADOR'].includes(authStore.role ?? '')
 )
 
 const abaAtiva = ref(isDiretor.value ? 'professores' : 'turmas')
@@ -81,6 +84,11 @@ const modalPromoverDiretor = ref(false)
 const submittingPromoverDiretor = ref(false)
 const profParaPromover = ref<Professor | null>(null)
 const academiaIdParaDiretor = ref<string>('')
+
+const modalSenha = ref(false)
+const submittingSenha = ref(false)
+const profParaSenha = ref<Professor | null>(null)
+const novaSenha = ref('')
 
 const loadingAcad = ref(false)
 const buscaAcad = ref('')
@@ -151,13 +159,79 @@ const academiaOptions = computed(() =>
   academias.value.map((a) => ({ label: a.nome, value: a.uuid }))
 )
 
+// Menu Contexto Professor
+const menuProf = ref()
+const profSelecionado = ref<Professor | null>(null)
+const menuItems = computed(() => {
+  if (!profSelecionado.value) return []
+  const p = profSelecionado.value
+  const items = []
+
+  items.push({
+    label: 'Editar',
+    icon: 'pi pi-pencil',
+    command: () => abrirEditarProf(p),
+  })
+  items.push({
+    label: 'Alterar Senha',
+    icon: 'pi pi-key',
+    command: () => abrirAlterarSenha(p),
+  })
+
+  if (isDiretor.value && p.cargo === 'PROFESSOR') {
+    items.push({
+      label: 'Promover a Coordenador',
+      icon: 'pi pi-arrow-up',
+      command: () => promoverCoordenador(p),
+    })
+  }
+  if (isDiretor.value && p.cargo === 'COORDENADOR') {
+    items.push({
+      label: 'Rebaixar a Professor',
+      icon: 'pi pi-arrow-down',
+      command: () => rebaixarProfessor(p),
+    })
+  }
+  if (isAdmin.value && (p.cargo === 'PROFESSOR' || p.cargo === 'COORDENADOR')) {
+    items.push({
+      label: 'Promover a Diretor',
+      icon: 'pi pi-star',
+      command: () => abrirPromoverDiretor(p),
+    })
+  }
+  if (isAdmin.value && p.cargo === 'DIRETOR') {
+    items.push({
+      label: 'Rebaixar',
+      icon: 'pi pi-arrow-down',
+      command: () => rebaixarUsuario(p),
+    })
+  }
+  if (p.cargo !== 'ADMIN' && p.cargo !== 'DIRETOR') {
+    items.push({
+      label: 'Remover',
+      icon: 'pi pi-trash',
+      command: () => excluirProf(p),
+    })
+  }
+
+  return items
+})
+
+const toggleMenuProf = (event: Event, prof: Professor) => {
+  profSelecionado.value = prof
+  menuProf.value.toggle(event)
+}
+
 onMounted(async () => {
   const calls: Promise<void>[] = [
-    carregarAcademias(),
     carregarNiveis(),
     carregarTurmas(),
+    carregarProfessores(),
   ]
-  if (isDiretor.value) calls.push(carregarProfessores())
+  if (isDiretor.value) {
+    calls.push(carregarAcademias())
+  }
+
   await Promise.all(calls)
 })
 
@@ -166,19 +240,15 @@ async function carregarProfessores() {
   try {
     const { data } = await api.get<Professor[]>('/api/professores')
     professores.value = data
-  } catch {
-    toast.add({
-      severity: 'error',
-      summary: 'Erro',
-      detail: 'Falha ao carregar professores.',
-    })
+  } catch (error) {
+    console.error('Erro ao carregar professores:', error)
   } finally {
     loadingProf.value = false
   }
 }
 
 async function abrirCriarProf() {
-  if (academias.value.length === 0) {
+  if (academias.value.length === 0 && isDiretor.value) {
     await carregarAcademias()
   }
   editandoProf.value = false
@@ -199,6 +269,44 @@ function abrirEditarProf(prof: Professor) {
   }
   errosProf.value = { nome: '', email: '', senha: '', academiaId: '' }
   modalProf.value = true
+}
+
+function abrirAlterarSenha(prof: Professor) {
+  profParaSenha.value = prof
+  novaSenha.value = ''
+  modalSenha.value = true
+}
+
+async function salvarNovaSenha() {
+  if (!novaSenha.value || novaSenha.value.length < 6) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Atenção',
+      detail: 'A senha deve ter no mínimo 6 caracteres.',
+    })
+    return
+  }
+  submittingSenha.value = true
+  try {
+    await api.put('/api/usuarios/alterar-senha', {
+      uuid: profParaSenha.value!.uuid,
+      novaSenha: novaSenha.value,
+    })
+    toast.add({
+      severity: 'success',
+      summary: 'Sucesso',
+      detail: 'Senha alterada com sucesso.',
+    })
+    modalSenha.value = false
+  } catch (e: any) {
+    toast.add({
+      severity: 'error',
+      summary: 'Erro',
+      detail: e.response?.data?.message ?? 'Falha ao alterar senha.',
+    })
+  } finally {
+    submittingSenha.value = false
+  }
 }
 
 function validarProf(): boolean {
@@ -430,12 +538,8 @@ async function carregarAcademias() {
   try {
     const { data } = await api.get<Academia[]>('/api/academias')
     academias.value = data
-  } catch {
-    toast.add({
-      severity: 'error',
-      summary: 'Erro',
-      detail: 'Falha ao carregar academias.',
-    })
+  } catch (error) {
+    console.error('Erro ao carregar academias:', error)
   } finally {
     loadingAcad.value = false
   }
@@ -590,8 +694,12 @@ function excluirAcad(acad: Academia) {
 }
 
 async function carregarNiveis() {
-  const { data } = await api.get<Nivel[]>('/api/niveis')
-  niveis.value = data
+  try {
+    const { data } = await api.get<Nivel[]>('/api/niveis')
+    niveis.value = data
+  } catch (error) {
+    console.error('Erro ao carregar níveis:', error)
+  }
 }
 
 async function carregarTurmas() {
@@ -599,6 +707,16 @@ async function carregarTurmas() {
   try {
     const { data } = await api.get<Turma[]>('/api/turmas')
     turmas.value = data
+  } catch (error: any) {
+    console.error('Erro ao carregar turmas:', error)
+    toast.add({
+      severity: 'warn',
+      summary: 'Aviso',
+      detail:
+        error.response?.data?.message ||
+        'Erro ao carregar turmas. Verifique seu vínculo.',
+      life: 5000,
+    })
   } finally {
     loadingTurmas.value = false
   }
@@ -737,6 +855,7 @@ function diasAbrev(dias: string[]) {
 <template>
   <div class="max-w-6xl mx-auto space-y-6 p-4">
     <ConfirmDialog />
+    <Menu ref="menuProf" :model="menuItems" :popup="true" />
 
     <div class="flex items-start justify-between">
       <div>
@@ -874,81 +993,21 @@ function diasAbrev(dias: string[]) {
 
                   <div class="flex items-center gap-2 shrink-0 ml-3">
                     <span
-                      class="text-xs font-semibold px-2 py-0.5 rounded-full hidden sm:inline-flex"
+                      class="text-xs font-semibold px-2 py-0.5 rounded-full hidden sm:inline-flex mr-2"
                       :class="cargoBadge(prof.cargo).cls"
                     >
                       {{ cargoBadge(prof.cargo).label }}
                     </span>
 
-                    <div
-                      class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <Button
-                        icon="pi pi-pencil"
-                        text
-                        rounded
-                        size="small"
-                        severity="secondary"
-                        v-tooltip.top="'Editar'"
-                        @click="abrirEditarProf(prof)"
-                      />
-                      <Button
-                        v-if="isDiretor && prof.cargo === 'PROFESSOR'"
-                        icon="pi pi-arrow-up"
-                        text
-                        rounded
-                        size="small"
-                        severity="success"
-                        v-tooltip.top="'Promover a Coordenador'"
-                        @click="promoverCoordenador(prof)"
-                      />
-                      <Button
-                        v-if="isDiretor && prof.cargo === 'COORDENADOR'"
-                        icon="pi pi-arrow-down"
-                        text
-                        rounded
-                        size="small"
-                        severity="warning"
-                        v-tooltip.top="'Rebaixar a Professor'"
-                        @click="rebaixarProfessor(prof)"
-                      />
-                      <Button
-                        v-if="
-                          isAdmin &&
-                          (prof.cargo === 'PROFESSOR' ||
-                            prof.cargo === 'COORDENADOR')
-                        "
-                        icon="pi pi-star"
-                        text
-                        rounded
-                        size="small"
-                        severity="info"
-                        v-tooltip.top="'Promover a Diretor'"
-                        @click="abrirPromoverDiretor(prof)"
-                      />
-                      <Button
-                        v-if="isAdmin && prof.cargo === 'DIRETOR'"
-                        icon="pi pi-arrow-down"
-                        text
-                        rounded
-                        size="small"
-                        severity="warning"
-                        v-tooltip.top="'Rebaixar a Professor'"
-                        @click="rebaixarUsuario(prof)"
-                      />
-                      <Button
-                        v-if="
-                          prof.cargo !== 'ADMIN' && prof.cargo !== 'DIRETOR'
-                        "
-                        icon="pi pi-trash"
-                        text
-                        rounded
-                        size="small"
-                        severity="danger"
-                        v-tooltip.top="'Remover'"
-                        @click="excluirProf(prof)"
-                      />
-                    </div>
+                    <Button
+                      icon="pi pi-ellipsis-v"
+                      text
+                      rounded
+                      severity="secondary"
+                      aria-haspopup="true"
+                      aria-controls="overlay_menu"
+                      @click="toggleMenuProf($event, prof)"
+                    />
                   </div>
                 </div>
               </div>
@@ -1577,6 +1636,43 @@ function diasAbrev(dias: string[]) {
           :loading="submittingPromoverDiretor"
           :disabled="!academiaIdParaDiretor"
           @click="confirmarPromoverDiretor"
+        />
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="modalSenha"
+      modal
+      header="Alterar Senha"
+      :style="{ width: '26rem' }"
+      :closable="!submittingSenha"
+    >
+      <div class="pt-2 space-y-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1.5"
+            >Nova Senha</label
+          >
+          <InputText
+            v-model="novaSenha"
+            type="password"
+            class="w-full"
+            placeholder="Mínimo 6 caracteres"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <Button
+          label="Cancelar"
+          text
+          severity="secondary"
+          :disabled="submittingSenha"
+          @click="modalSenha = false"
+        />
+        <Button
+          label="Salvar Senha"
+          icon="pi pi-check"
+          :loading="submittingSenha"
+          @click="salvarNovaSenha"
         />
       </template>
     </Dialog>

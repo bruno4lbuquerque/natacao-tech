@@ -45,6 +45,29 @@ export const useStudentsStore = defineStore('students', () => {
     }
   }
 
+  async function fetchMeusAlunos() {
+    loading.value = true
+    try {
+      const response = await api.get('/api/alunos/meus-alunos')
+      return response.data?.content || response.data || []
+    } catch (error) {
+      console.error('Erro ao buscar meus alunos:', error)
+      return []
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchHistoricoAluno(uuid: string) {
+    try {
+      const response = await api.get(`/api/alunos/${uuid}/historico`)
+      return response.data
+    } catch (error) {
+      console.error('Erro ao buscar histórico do aluno:', error)
+      throw error
+    }
+  }
+
   async function addStudent(payload: any) {
     try {
       await api.post('/api/alunos', payload)
@@ -87,5 +110,7 @@ export const useStudentsStore = defineStore('students', () => {
     addStudent,
     updateStudent,
     deleteStudent,
+    fetchMeusAlunos,
+    fetchHistoricoAluno,
   }
 })

@@ -25,5 +25,15 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
   }
 
-  return { stats, loading, fetchDashboard }
+  async function fetchEstatisticas() {
+    try {
+      const response = await api.get('/api/dashboard/estatisticas')
+      return response.data
+    } catch (error) {
+      console.error('Erro ao buscar estatísticas do dashboard:', error)
+      throw error
+    }
+  }
+
+  return { stats, loading, fetchDashboard, fetchEstatisticas }
 })

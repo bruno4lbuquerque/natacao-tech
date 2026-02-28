@@ -9,7 +9,9 @@ import InputText from 'primevue/inputtext'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
 import ConfirmDialog from 'primevue/confirmdialog'
+import Tooltip from 'primevue/tooltip'
 
+const vTooltip = Tooltip
 const toast = useToast()
 const confirm = useConfirm()
 
@@ -207,7 +209,6 @@ function confirmarRemocao(hab: any) {
   <div class="max-w-5xl mx-auto space-y-6 p-4">
     <ConfirmDialog />
 
-    <!-- Header -->
     <div
       class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
     >
@@ -238,7 +239,6 @@ function confirmarRemocao(hab: any) {
       />
     </div>
 
-    <!-- Seletor de nível -->
     <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
       <label class="block text-sm font-semibold text-slate-700 mb-2">
         Selecione o Nível (Touca)
@@ -254,12 +254,10 @@ function confirmarRemocao(hab: any) {
       />
     </div>
 
-    <!-- Loading -->
     <div v-if="loading" class="flex justify-center py-16">
       <i class="pi pi-spin pi-spinner text-4xl text-sky-500"></i>
     </div>
 
-    <!-- Nenhum nível selecionado -->
     <div
       v-else-if="!nivelSelecionado"
       class="text-center py-16 bg-white rounded-xl border border-dashed border-slate-200"
@@ -271,7 +269,6 @@ function confirmarRemocao(hab: any) {
       </p>
     </div>
 
-    <!-- Sem habilidades -->
     <div
       v-else-if="habilidadesAtivas.length === 0"
       class="text-center py-16 bg-white rounded-xl border border-dashed border-slate-200"
@@ -289,7 +286,6 @@ function confirmarRemocao(hab: any) {
       />
     </div>
 
-    <!-- Habilidades agrupadas por categoria -->
     <div v-else class="space-y-4">
       <div
         v-for="(itens, categoria) in habilidadesPorCategoria"
@@ -351,7 +347,6 @@ function confirmarRemocao(hab: any) {
       </p>
     </div>
 
-    <!-- Modal criar/editar -->
     <Dialog
       v-model:visible="showModal"
       modal

@@ -67,3 +67,23 @@ export interface HistoricoAvaliacaoDTO {
   observacoes?: string | null
   habilidadesAprovadas?: string[] | null
 }
+
+export interface AcademiaDTO {
+  uuid: string
+  nome: string
+  logoUrl?: string
+}
+
+export interface UsuarioDTO {
+  uuid: string
+  nome: string
+  email: string
+  role: string
+}
+
+export interface EstatisticasDTO {
+  totalAlunos: number
+  totalTurmas: number
+  totalProfessores: number
+  alunosPorNivel: Record<string, number>
+}

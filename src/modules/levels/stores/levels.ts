@@ -15,7 +15,9 @@ export const useLevelsStore = defineStore('levels', () => {
     } catch (error: any) {
       const status = error?.response?.status
       if (status === 403) {
-        console.error('Acesso negado ao buscar níveis. Verifique as permissões do usuário ou o CORS do backend.')
+        console.error(
+          'Acesso negado ao buscar níveis. Verifique as permissões do usuário ou o CORS do backend.'
+        )
       } else {
         console.error('Erro ao buscar níveis:', error)
       }
@@ -23,10 +25,19 @@ export const useLevelsStore = defineStore('levels', () => {
       loading.value = false
     }
   }
+  async function updateNivel(uuid: string, payload: any) {
+    try {
+      await api.put(`/api/niveis/${uuid}`, payload)
+    } catch (error) {
+      console.error('Erro ao atualizar nível:', error)
+      throw error
+    }
+  }
 
   return {
     levels,
     loading,
     fetchLevels,
+    updateNivel,
   }
 })

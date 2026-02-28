@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useDashboardStore } from '@/modules/dashboard/stores/dashboard'
 import { formatDays } from '@/core/utils/formatters'
 
 const store = useDashboardStore()
+const stats = ref({ totalAlunos: 0, totalTurmas: 0, totalProfessores: 0 })
 
-onMounted(() => {
+onMounted(async () => {
   store.fetchDashboard()
+  stats.value = await store.fetchEstatisticas()
 })
 </script>
 
@@ -27,7 +29,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       <div
         class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden"
       >
@@ -43,7 +45,7 @@ onMounted(() => {
           >Total de Alunos</span
         >
         <span class="block text-3xl font-bold text-gray-800 mt-1">{{
-          store.stats.totalAlunos
+          stats.totalAlunos
         }}</span>
       </div>
 
@@ -59,10 +61,27 @@ onMounted(() => {
           <i class="pi pi-calendar text-xl"></i>
         </div>
         <span class="block text-gray-500 text-sm font-medium"
-          >Minhas Turmas</span
+          >Turmas Ativas</span
         >
         <span class="block text-3xl font-bold text-gray-800 mt-1">{{
-          store.stats.totalTurmas
+          stats.totalTurmas
+        }}</span>
+      </div>
+
+      <div
+        class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden"
+      >
+        <div class="absolute right-0 top-0 p-4 opacity-10">
+          <i class="pi pi-id-card text-6xl text-green-600"></i>
+        </div>
+        <div
+          class="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center text-green-600 mb-4"
+        >
+          <i class="pi pi-id-card text-xl"></i>
+        </div>
+        <span class="block text-gray-500 text-sm font-medium">Professores</span>
+        <span class="block text-3xl font-bold text-gray-800 mt-1">{{
+          stats.totalProfessores
         }}</span>
       </div>
     </div>

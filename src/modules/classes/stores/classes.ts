@@ -50,6 +50,61 @@ export const useClassesStore = defineStore('classes', () => {
     }
   }
 
+  async function fetchAlunosTurma(uuid: string) {
+    try {
+      const response = await api.get(`/api/turmas/${uuid}/alunos`)
+      return response.data
+    } catch (error) {
+      console.error('Erro ao buscar alunos da turma:', error)
+      return []
+    }
+  }
+
+  async function fetchAlunosSemTurma() {
+    try {
+      const response = await api.get('/api/turmas/alunos/sem-turma')
+      return response.data
+    } catch (error) {
+      console.error('Erro ao buscar alunos sem turma:', error)
+      return []
+    }
+  }
+
+  async function updateProfessorTurma(uuid: string, professorId: string) {
+    try {
+      await api.patch(`/api/turmas/${uuid}/professor`, { professorId })
+      await fetchClasses()
+    } catch (error) {
+      console.error('Erro ao atualizar professor da turma:', error)
+      throw error
+    }
+  }
+
+  async function addAlunoTurma(turmaUuid: string, alunoUuid: string) {
+    try {
+      await api.post(`/api/turmas/${turmaUuid}/alunos/${alunoUuid}`)
+    } catch (error) {
+      console.error('Erro ao adicionar aluno à turma:', error)
+      throw error
+    }
+  }
+
+  async function transferAlunoTurma(
+    turmaAtualUuid: string,
+    alunoUuid: string,
+    novaTurmaUuid: string
+  ) {
+    try {
+      await api.patch(
+        `/api/turmas/${turmaAtualUuid}/alunos/${alunoUuid}/transferir`,
+        { novaTurmaId: novaTurmaUuid }
+      )
+    } catch (error) {
+      console.error('Erro ao transferir aluno:', error)
+      throw error
+    }
+  }
+
   async function deleteClass(uuid: string) {
     loading.value = true
     try {
@@ -90,5 +145,10 @@ export const useClassesStore = defineStore('classes', () => {
     createClass,
     deleteClass,
     removeStudentFromClass,
+    fetchAlunosTurma,
+    fetchAlunosSemTurma,
+    updateProfessorTurma,
+    addAlunoTurma,
+    transferAlunoTurma,
   }
 })
