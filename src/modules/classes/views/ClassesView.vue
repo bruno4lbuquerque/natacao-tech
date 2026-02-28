@@ -391,7 +391,7 @@ const carregarProfessores = async () => {
 
 const carregarAlunosSemTurma = async () => {
   try {
-    const { data } = await api.get<AlunoDTO[]>('/api/alunos/sem-turma')
+    const { data } = await api.get<AlunoDTO[]>('/api/turmas/alunos/sem-turma')
     alunosSemTurma.value = data
   } catch {
     // endpoint pode não existir — ignora silenciosamente
@@ -465,9 +465,9 @@ function openCreateModal() {
 async function matricular() {
   if (!alunoSelecionado.value || !selectedClass.value) return
   try {
-    await api.post(`/api/turmas/${selectedClass.value.uuid}/alunos`, {
-      alunoId: alunoSelecionado.value,
-    })
+    await api.post(
+      `/api/turmas/${selectedClass.value.uuid}/alunos/${alunoSelecionado.value}`
+    )
     await Promise.all([
       classesStore.fetchClasses(),
       carregarAlunosDaTurma(selectedClass.value.uuid),
