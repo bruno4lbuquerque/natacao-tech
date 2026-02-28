@@ -67,11 +67,28 @@ export const useClassesStore = defineStore('classes', () => {
     }
   }
 
+  async function removeStudentFromClass(turmaUuid: string, alunoUuid: string) {
+    loading.value = true
+    try {
+      await api.delete(`/api/turmas/${turmaUuid}/alunos/${alunoUuid}`)
+      return { success: true }
+    } catch (error: any) {
+      console.error('Erro ao remover aluno da turma:', error)
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Erro ao remover aluno',
+      }
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     classes,
     loading,
     fetchClasses,
     createClass,
     deleteClass,
+    removeStudentFromClass,
   }
 })

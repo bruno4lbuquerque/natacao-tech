@@ -24,6 +24,7 @@ export const useAssessmentsStore = defineStore('assessments', () => {
     loading.value = true
     try {
       const payload = {
+        turmaId: turmaUuid,
         avaliacoes: evaluations.map((ev) => ({
           alunoId: ev.studentId,
           habilidadesAprovadasIds: ev.approvedSkills,

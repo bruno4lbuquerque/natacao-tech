@@ -63,7 +63,7 @@ export const useStudentsStore = defineStore('students', () => {
 
       if (payload.novaTurmaId) {
         await api.patch(`/api/alunos/${id}/transferencia`, {
-          novaTurmaId: payload.novaTurmaId,
+          novasTurmasIds: [payload.novaTurmaId],
         })
       }
       await fetchStudents()
