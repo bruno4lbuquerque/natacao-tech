@@ -61,10 +61,10 @@ export const useStudentsStore = defineStore('students', () => {
   async function fetchHistoricoAluno(uuid: string) {
     try {
       const response = await api.get(`/api/alunos/${uuid}/historico`)
-      return response.data
+      return response.data?.content || response.data || []
     } catch (error) {
       console.error('Erro ao buscar histórico do aluno:', error)
-      throw error
+      return []
     }
   }
 

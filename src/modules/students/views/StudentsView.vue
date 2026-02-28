@@ -266,7 +266,7 @@
         >
           <div class="flex justify-between items-center mb-2">
             <span class="font-bold text-slate-800">{{
-              item.dataAvaliacao
+              formatarDataLocal(item.dataAvaliacao)
             }}</span>
             <span
               :class="
@@ -280,7 +280,7 @@
             </span>
           </div>
           <div class="text-sm text-slate-600">
-            Nível: <strong>{{ item.nivel }}</strong>
+            Nível: <strong>{{ item.nivelNome }}</strong>
           </div>
           <div
             v-if="item.observacoes"
@@ -424,5 +424,14 @@ function deleteStudent(id: string) {
   if (confirm('Tem certeza que deseja excluir este aluno?')) {
     studentsStore.deleteStudent(id)
   }
+}
+
+function formatarDataLocal(dt: string | number[]): string {
+  if (!dt) return '--/--/----'
+  if (Array.isArray(dt)) {
+    const [y, m, d] = dt
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
+  }
+  return new Date(dt).toLocaleDateString('pt-BR')
 }
 </script>

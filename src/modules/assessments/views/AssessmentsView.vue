@@ -340,10 +340,8 @@ async function abrirHistorico(aluno: Aluno) {
   modalHistorico.value = true
   loadingHistorico.value = true
   try {
-    const { data } = await api.get<Historico[]>(
-      `/api/alunos/${aluno.uuid}/historico`
-    )
-    historico.value = data
+    const { data } = await api.get(`/api/alunos/${aluno.uuid}/historico`)
+    historico.value = data.content || data
   } catch {
     toast.add({
       severity: 'error',
@@ -398,7 +396,12 @@ function iniciais(nome: string): string {
     .toUpperCase()
 }
 
-function formatarData(dt: string): string {
+function formatarData(dt: string | number[]): string {
+  if (!dt) return '--/--/----'
+  if (Array.isArray(dt)) {
+    const [y, m, d] = dt
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
+  }
   return new Date(dt).toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
