@@ -8,6 +8,7 @@ import { useAssessmentsStore } from '@/modules/assessments/stores/assessments'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import ConfirmDialog from 'primevue/confirmdialog'
+import Checkbox from 'primevue/checkbox'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -51,6 +52,7 @@ interface Historico {
 }
 
 const observacoes = ref<Record<string, string>>({})
+const promoverManual = ref<Record<string, boolean>>({})
 const etapa = ref<number>(1)
 
 const turmas = ref<Turma[]>([])
@@ -300,7 +302,7 @@ async function salvarAvaliacao() {
               .filter((h) => respostas.value[h.uuid]?.[aluno.uuid] === true)
               .map((h) => h.uuid),
             observacao: observacoes.value[aluno.uuid] || null,
-            promoverManual: false,
+            promoverManual: promoverManual.value[aluno.uuid] || false,
           })),
         }
         await api.post('/api/avaliacoes/lote', payload)
@@ -332,6 +334,7 @@ function reiniciar() {
   alunosSelecionados.value = new Set()
   respostas.value = {}
   observacoes.value = {}
+  promoverManual.value = {}
   perguntaAtual.value = 0
   buscaAluno.value = ''
 }
@@ -977,7 +980,21 @@ function avatarTxtCls(resp: boolean | undefined): string {
             ></textarea>
           </div>
 
-          <div class="flex flex-wrap gap-1.5">
+          <div class="mb-4 flex items-center gap-2">
+            <Checkbox
+              v-model="promoverManual[item.aluno.uuid]"
+              :binary="true"
+              :inputId="'promo_' + item.aluno.uuid"
+            />
+            <label
+              :for="'promo_' + item.aluno.uuid"
+              class="text-xs font-semibold text-slate-600 cursor-pointer select-none"
+            >
+              Forçar promoção de nível (Sobrescreve a regra automática)
+            </label>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5 pt-4 border-t border-slate-50">
             <span
               v-for="hab in habilidadesAtivas"
               :key="hab.uuid"
