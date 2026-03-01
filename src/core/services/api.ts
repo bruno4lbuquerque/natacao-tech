@@ -22,6 +22,8 @@ const processQueue = (error: any, token: string | null = null) => {
 function limparSessao() {
   localStorage.removeItem('user')
   localStorage.removeItem('role')
+  sessionStorage.removeItem('token')
+  sessionStorage.removeItem('refreshToken')
   delete api.defaults.headers.common['Authorization']
 }
 
@@ -59,12 +61,12 @@ api.interceptors.response.use(
           .catch((err) => Promise.reject(err))
       }
 
-      const currentToken = api.defaults.headers.common['Authorization']
+      const currentRefreshToken = sessionStorage.getItem('refreshToken')
 
-      if (!currentToken) {
+      if (!currentRefreshToken) {
         limparSessao()
         if (router.currentRoute.value.path !== '/login') router.push('/login')
-        return Promise.reject(new Error('Token ausente na memória'))
+        return Promise.reject(new Error('Refresh Token ausente'))
       }
 
       isRefreshing = true
@@ -72,14 +74,16 @@ api.interceptors.response.use(
       try {
         const refreshResponse = await axios.post(
           '/auth/refresh',
-          {},
-          {
-            baseURL: api.defaults.baseURL,
-            headers: { Authorization: currentToken },
-          }
+          { refreshToken: currentRefreshToken },
+          { baseURL: api.defaults.baseURL }
         )
 
         const newToken = refreshResponse.data.token
+        const newRefreshToken = refreshResponse.data.refreshToken
+
+        sessionStorage.setItem('token', newToken)
+        sessionStorage.setItem('refreshToken', newRefreshToken)
+
         api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
 
         if (config.headers && typeof config.headers.set === 'function') {

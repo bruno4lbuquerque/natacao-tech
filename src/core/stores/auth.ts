@@ -14,17 +14,14 @@ function sanitizarRole(role: string | null): RoleValida | null {
 export const useAuthStore = defineStore('auth', () => {
   const router = useRouter()
 
-  // Persistência visual (LocalStorage)
   const user = ref<string | null>(localStorage.getItem('user'))
   const role = ref<RoleValida | null>(
     sanitizarRole(localStorage.getItem('role'))
   )
 
-  // PROTEÇÃO XSS: Token mantido apenas em memória (ou injetado no Axios)
-  const token = ref<string | null>(null)
+  const token = ref<string | null>(sessionStorage.getItem('token'))
   const loading = ref(false)
 
-  // Computeds Originais de Permissão
   const isAuthenticated = computed(
     () => !!user.value && !!role.value && !!token.value
   )
@@ -43,14 +40,18 @@ export const useAuthStore = defineStore('auth', () => {
   function checkAuth() {
     const storedRole = localStorage.getItem('role')
     const storedUser = localStorage.getItem('user')
+    const storedToken = sessionStorage.getItem('token')
 
-    if (!storedUser || !storedRole) {
+    if (!storedUser || !storedRole || !storedToken) {
       _limparSessao()
       return
     }
 
     user.value = storedUser
     role.value = sanitizarRole(storedRole)
+    token.value = storedToken
+
+    api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
   }
 
   async function signIn(email: string, pass: string) {
@@ -63,10 +64,11 @@ export const useAuthStore = defineStore('auth', () => {
 
       const userLogin = response.data.login
       const userRoleData = response.data.role
-      const tokenData = response.data.token
+      const accessToken = response.data.token
+      const refreshToken = response.data.refreshToken
       const roleValidado = sanitizarRole(userRoleData)
 
-      if (!roleValidado || !tokenData) {
+      if (!roleValidado || !accessToken) {
         return {
           success: false,
           error: 'Acesso negado: Perfil ou token inválido.',
@@ -75,12 +77,14 @@ export const useAuthStore = defineStore('auth', () => {
 
       localStorage.setItem('user', userLogin)
       localStorage.setItem('role', roleValidado)
+      sessionStorage.setItem('token', accessToken)
+      sessionStorage.setItem('refreshToken', refreshToken)
 
       user.value = userLogin
       role.value = roleValidado
-      token.value = tokenData
+      token.value = accessToken
 
-      api.defaults.headers.common['Authorization'] = `Bearer ${tokenData}`
+      api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
 
       return { success: true }
     } catch (error: any) {
@@ -97,6 +101,8 @@ export const useAuthStore = defineStore('auth', () => {
   function _limparSessao() {
     localStorage.removeItem('user')
     localStorage.removeItem('role')
+    sessionStorage.removeItem('token')
+    sessionStorage.removeItem('refreshToken')
     user.value = null
     role.value = null
     token.value = null
@@ -118,7 +124,6 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await api.put('/api/usuarios/alterar-senha', payload)
     } catch (error) {
-      console.error('Erro ao alterar senha:', error)
       throw error
     }
   }
@@ -127,7 +132,6 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await api.patch(`/api/usuarios/${uuid}/promover-diretor`)
     } catch (error) {
-      console.error('Erro ao promover diretor:', error)
       throw error
     }
   }
@@ -136,7 +140,6 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await api.patch(`/api/usuarios/${uuid}/rebaixar-usuario`)
     } catch (error) {
-      console.error('Erro ao rebaixar usuário:', error)
       throw error
     }
   }
