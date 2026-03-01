@@ -8,7 +8,7 @@ export interface Student {
   age: number
   nivelId: string
   level: string
-  turmas: string
+  turmas: string[]
   status: 'active' | 'inactive'
   contact: string
 }
@@ -27,16 +27,27 @@ export const useStudentsStore = defineStore('students', () => {
         return
       }
 
-      students.value = data.map((a: any) => ({
-        id: a.uuid,
-        name: a.nome,
-        age: a.idade || 0,
-        nivelId: a.nivelUuid || '',
-        level: a.nivelAtual || 'Sem nível',
-        turmas: a.nomesTurmas ? a.nomesTurmas.join(', ') : a.turmas || '',
-        status: a.ativo !== false ? 'active' : 'inactive',
-        contact: a.telefone || '',
-      }))
+      students.value = data.map((a: any) => {
+        let listaTurmas: string[] = []
+        if (Array.isArray(a.turmas)) {
+          listaTurmas = a.turmas
+        } else if (Array.isArray(a.nomesTurmas)) {
+          listaTurmas = a.nomesTurmas
+        } else if (typeof a.turmas === 'string' && a.turmas.trim() !== '') {
+          listaTurmas = a.turmas.split(',').map((t: string) => t.trim())
+        }
+
+        return {
+          id: a.uuid,
+          name: a.nome,
+          age: a.idade || 0,
+          nivelId: a.nivelUuid || '',
+          level: a.nivelNome || a.nivelAtual || 'Sem nível',
+          turmas: listaTurmas,
+          status: a.ativo !== false ? 'active' : 'inactive',
+          contact: a.telefone || '',
+        }
+      })
     } catch (error) {
       console.error('Erro ao buscar alunos:', error)
       students.value = []
@@ -49,10 +60,30 @@ export const useStudentsStore = defineStore('students', () => {
     loading.value = true
     try {
       const response = await api.get('/api/alunos/meus-alunos')
-      return response.data?.content || response.data || []
+      const data = response.data?.content || response.data || []
+
+      students.value = data.map((a: any) => {
+        let listaTurmas: string[] = []
+        if (Array.isArray(a.turmas)) listaTurmas = a.turmas
+        else if (Array.isArray(a.nomesTurmas)) listaTurmas = a.nomesTurmas
+        else if (typeof a.turmas === 'string' && a.turmas.trim() !== '') {
+          listaTurmas = a.turmas.split(',').map((t: string) => t.trim())
+        }
+
+        return {
+          id: a.uuid,
+          name: a.nome,
+          age: a.idade || 0,
+          nivelId: a.nivelUuid || '',
+          level: a.nivelNome || a.nivelAtual || 'Sem nível',
+          turmas: listaTurmas,
+          status: a.ativo !== false ? 'active' : 'inactive',
+          contact: a.telefone || '',
+        }
+      })
     } catch (error) {
       console.error('Erro ao buscar meus alunos:', error)
-      return []
+      students.value = []
     } finally {
       loading.value = false
     }

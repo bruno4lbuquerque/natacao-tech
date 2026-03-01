@@ -278,15 +278,17 @@
                 <div
                   class="w-10 h-10 bg-sky-100 text-sky-700 rounded-full flex items-center justify-center font-bold mr-4 shrink-0"
                 >
-                  {{ student.nome.charAt(0).toUpperCase() }}
+                  {{ student.nome?.charAt(0)?.toUpperCase() ?? '?' }}
                 </div>
                 <div>
                   <p class="text-sm font-semibold text-gray-900">
                     {{ student.nome }}
                   </p>
                   <p class="text-xs text-gray-500 mt-0.5">
-                    {{ student.nomeResponsavel || 'Sem responsável' }} •
-                    {{ student.telefoneResponsavel || 'Sem contato' }}
+                    Nível:
+                    <span class="font-medium">{{
+                      student.nivelNome || 'Sem Nível'
+                    }}</span>
                   </p>
                 </div>
               </div>
@@ -354,7 +356,7 @@ const selectedClass = ref<any>(null)
 const professores = ref<any[]>([])
 
 // Alunos da turma selecionada (carregados via API)
-const classStudents = ref<AlunoDTO[]>([])
+const classStudents = ref<any[]>([])
 const loadingClassStudents = ref(false)
 
 // Alunos disponíveis para matrícula
@@ -391,20 +393,16 @@ const carregarProfessores = async () => {
 
 const carregarAlunosSemTurma = async () => {
   try {
-    const { data } = await api.get<AlunoDTO[]>('/api/turmas/alunos/sem-turma')
+    const { data } = await api.get<any[]>('/api/turmas/alunos/sem-turma')
     alunosSemTurma.value = data
-  } catch {
-    // endpoint pode não existir — ignora silenciosamente
-  }
+  } catch {}
 }
 
 const carregarAlunosDaTurma = async (turmaUuid: string) => {
   loadingClassStudents.value = true
   classStudents.value = []
   try {
-    const { data } = await api.get<AlunoDTO[]>(
-      `/api/turmas/${turmaUuid}/alunos`
-    )
+    const { data } = await api.get<any[]>(`/api/turmas/${turmaUuid}/alunos`)
     classStudents.value = data
   } catch {
     toast.add({
@@ -437,9 +435,19 @@ const filteredClasses = computed(() => {
   )
 })
 
-function formatarHorario(horario: string | null | undefined): string {
+// === SOLUÇÃO DEFINITIVA DO ERRO DE RENDERIZAÇÃO ===
+// Esta função agora suporta o formato Array ([8, 30]) que o Spring Boot envia por padrão
+function formatarHorario(horario: any): string {
   if (!horario) return '--:--'
-  return horario.substring(0, 5)
+  if (Array.isArray(horario)) {
+    const h = String(horario[0]).padStart(2, '0')
+    const m = String(horario[1] || 0).padStart(2, '0')
+    return `${h}:${m}`
+  }
+  if (typeof horario === 'string') {
+    return horario.substring(0, 5)
+  }
+  return '--:--'
 }
 
 async function openClassStudentsModal(classItem: any) {

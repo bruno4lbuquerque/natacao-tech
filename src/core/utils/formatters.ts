@@ -35,3 +35,18 @@ export const formatDays = (
     .sort((a, b) => order.indexOf(a) - order.indexOf(b))
     .map((d) => map[d] ?? d)
 }
+
+export const formatTime = (
+  time: string | number[] | null | undefined
+): string => {
+  if (!time) return '--:--'
+  if (Array.isArray(time)) {
+    const h = String(time[0]).padStart(2, '0')
+    const m = String(time[1] || 0).padStart(2, '0')
+    return `${h}:${m}`
+  }
+  if (typeof time === 'string') {
+    return time.substring(0, 5)
+  }
+  return '--:--'
+}
