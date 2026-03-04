@@ -175,7 +175,7 @@ async function salvarAcad() {
 
     if (logoAcad.value && currentUuid) {
       const formLogo = new FormData()
-      formLogo.append('logo', logoAcad.value)
+      formLogo.append('file', logoAcad.value)
       await api.post(`/api/academias/${currentUuid}/logo`, formLogo, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })

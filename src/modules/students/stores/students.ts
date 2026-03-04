@@ -5,7 +5,7 @@ import api from '@/core/services/api'
 export interface Student {
   id: string
   name: string
-  age: number
+  dataNascimento: string | null
   nivelId: string
   level: string
   turmas: string[]
@@ -16,40 +16,52 @@ export interface Student {
 export const useStudentsStore = defineStore('students', () => {
   const students = ref<Student[]>([])
   const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  function mapAluno(a: any): Student {
+    let listaTurmas: string[] = []
+    if (Array.isArray(a.turmas)) {
+      listaTurmas = a.turmas.map((t: any) =>
+        typeof t === 'string' ? t : (t?.nome ?? String(t))
+      )
+    } else if (Array.isArray(a.nomesTurmas)) {
+      listaTurmas = a.nomesTurmas
+    } else if (typeof a.turmas === 'string' && a.turmas.trim()) {
+      listaTurmas = a.turmas.split(',').map((t: string) => t.trim())
+    }
+
+    const nivelAtualNome =
+      typeof a.nivelAtual === 'string'
+        ? a.nivelAtual
+        : (a.nivelAtual?.nome ?? null)
+
+    const nivelUuid =
+      a.nivelUuid ??
+      (typeof a.nivelAtual === 'object' ? a.nivelAtual?.uuid : null) ??
+      ''
+
+    return {
+      id: a.uuid ?? a.id ?? '',
+      name: a.nome ?? a.name ?? '',
+      dataNascimento: a.dataNascimento ?? null,
+      nivelId: nivelUuid,
+      level: a.nivelNome ?? nivelAtualNome ?? 'Sem nível',
+      turmas: listaTurmas,
+      status: a.ativo !== false ? 'active' : 'inactive',
+      contact: a.telefoneResponsavel ?? a.telefone ?? a.contact ?? '',
+    }
+  }
 
   async function fetchStudents() {
     loading.value = true
+    error.value = null
     try {
       const response = await api.get('/api/alunos')
-      const data = response.data?.content || response.data || []
-      if (!Array.isArray(data)) {
-        students.value = []
-        return
-      }
-
-      students.value = data.map((a: any) => {
-        let listaTurmas: string[] = []
-        if (Array.isArray(a.turmas)) {
-          listaTurmas = a.turmas
-        } else if (Array.isArray(a.nomesTurmas)) {
-          listaTurmas = a.nomesTurmas
-        } else if (typeof a.turmas === 'string' && a.turmas.trim() !== '') {
-          listaTurmas = a.turmas.split(',').map((t: string) => t.trim())
-        }
-
-        return {
-          id: a.uuid,
-          name: a.nome,
-          age: a.idade || 0,
-          nivelId: a.nivelUuid || '',
-          level: a.nivelNome || a.nivelAtual || 'Sem nível',
-          turmas: listaTurmas,
-          status: a.ativo !== false ? 'active' : 'inactive',
-          contact: a.telefone || '',
-        }
-      })
-    } catch (error) {
-      console.error('Erro ao buscar alunos:', error)
+      const data = response.data?.content ?? response.data ?? []
+      students.value = Array.isArray(data) ? data.map(mapAluno) : []
+    } catch (err: any) {
+      console.error('Erro ao buscar alunos:', err)
+      error.value = err.response?.data?.message ?? 'Falha ao carregar alunos.'
       students.value = []
     } finally {
       loading.value = false
@@ -58,31 +70,14 @@ export const useStudentsStore = defineStore('students', () => {
 
   async function fetchMeusAlunos() {
     loading.value = true
+    error.value = null
     try {
       const response = await api.get('/api/alunos/meus-alunos')
-      const data = response.data?.content || response.data || []
-
-      students.value = data.map((a: any) => {
-        let listaTurmas: string[] = []
-        if (Array.isArray(a.turmas)) listaTurmas = a.turmas
-        else if (Array.isArray(a.nomesTurmas)) listaTurmas = a.nomesTurmas
-        else if (typeof a.turmas === 'string' && a.turmas.trim() !== '') {
-          listaTurmas = a.turmas.split(',').map((t: string) => t.trim())
-        }
-
-        return {
-          id: a.uuid,
-          name: a.nome,
-          age: a.idade || 0,
-          nivelId: a.nivelUuid || '',
-          level: a.nivelNome || a.nivelAtual || 'Sem nível',
-          turmas: listaTurmas,
-          status: a.ativo !== false ? 'active' : 'inactive',
-          contact: a.telefone || '',
-        }
-      })
-    } catch (error) {
-      console.error('Erro ao buscar meus alunos:', error)
+      const data = response.data?.content ?? response.data ?? []
+      students.value = Array.isArray(data) ? data.map(mapAluno) : []
+    } catch (err: any) {
+      console.error('Erro ao buscar meus alunos:', err)
+      error.value = err.response?.data?.message ?? 'Falha ao carregar alunos.'
       students.value = []
     } finally {
       loading.value = false
@@ -92,51 +87,36 @@ export const useStudentsStore = defineStore('students', () => {
   async function fetchHistoricoAluno(uuid: string) {
     try {
       const response = await api.get(`/api/alunos/${uuid}/historico`)
-      return response.data?.content || response.data || []
-    } catch (error) {
-      console.error('Erro ao buscar histórico do aluno:', error)
+      return response.data?.content ?? response.data ?? []
+    } catch (err) {
+      console.error('Erro ao buscar histórico:', err)
       return []
     }
   }
 
   async function addStudent(payload: any) {
-    try {
-      await api.post('/api/alunos', payload)
-      await fetchStudents()
-    } catch (error) {
-      console.error('Erro ao criar aluno:', error)
-      throw error
-    }
+    await api.post('/api/alunos', payload)
+    await fetchStudents()
   }
 
   async function updateStudent(id: string, payload: any) {
-    try {
-      await api.put(`/api/alunos/${id}`, payload)
-
-      if (payload.novasTurmasIds !== undefined) {
-        await api.patch(`/api/alunos/${id}/transferencia`, {
-          novasTurmasIds: payload.novasTurmasIds,
-        })
-      }
-      await fetchStudents()
-    } catch (error) {
-      console.error('Erro ao atualizar aluno:', error)
-      throw error
+    const { novasTurmasIds, ...dadosAluno } = payload
+    await api.put(`/api/alunos/${id}`, dadosAluno)
+    if (novasTurmasIds !== undefined) {
+      await api.patch(`/api/alunos/${id}/transferencia`, { novasTurmasIds })
     }
+    await fetchStudents()
   }
 
   async function deleteStudent(id: string) {
-    try {
-      await api.delete(`/api/alunos/${id}`)
-      students.value = students.value.filter((s) => s.id !== id)
-    } catch (error) {
-      console.error('Erro ao excluir aluno:', error)
-    }
+    await api.delete(`/api/alunos/${id}`)
+    students.value = students.value.filter((s) => s.id !== id)
   }
 
   return {
     students,
     loading,
+    error,
     fetchStudents,
     addStudent,
     updateStudent,

@@ -25,6 +25,34 @@
       </div>
     </div>
 
+    <div class="flex items-center gap-3 flex-wrap">
+      <span class="text-sm font-semibold text-slate-500">Filtrar por:</span>
+      <button
+        @click="filtroProfessor = ''"
+        class="text-xs font-bold px-3 py-1.5 rounded-full border transition-colors"
+        :class="
+          filtroProfessor === ''
+            ? 'bg-sky-500 text-white border-sky-500'
+            : 'bg-white text-slate-500 border-slate-200 hover:border-sky-300'
+        "
+      >
+        Todos
+      </button>
+      <button
+        v-for="prof in professoresUnicos"
+        :key="prof"
+        @click="filtroProfessor = prof"
+        class="text-xs font-bold px-3 py-1.5 rounded-full border transition-colors"
+        :class="
+          filtroProfessor === prof
+            ? 'bg-sky-500 text-white border-sky-500'
+            : 'bg-white text-slate-500 border-slate-200 hover:border-sky-300'
+        "
+      >
+        {{ prof }}
+      </button>
+    </div>
+
     <div v-if="classesStore.loading" class="text-center py-10">
       <i class="pi pi-spin pi-spinner text-4xl text-sky-500"></i>
     </div>
@@ -34,9 +62,7 @@
       class="text-center py-12 bg-white rounded-xl border border-gray-100"
     >
       <i class="pi pi-calendar text-4xl text-slate-200 mb-3 block"></i>
-      <p class="text-gray-500">
-        Nenhuma turma encontrada para o filtro "{{ searchQuery }}".
-      </p>
+      <p class="text-gray-500">Nenhuma turma encontrada.</p>
     </div>
 
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -91,7 +117,7 @@
           <div class="flex items-center justify-between text-sm text-gray-600">
             <span class="flex items-center gap-2">
               <i class="pi pi-users text-slate-400"></i>
-              {{ turma.quantidadeAlunos ?? 0 }} alunos matriculados
+              {{ turma.quantidadeAlunos ?? 0 }} alunos
             </span>
             <Button
               icon="pi pi-trash"
@@ -138,11 +164,35 @@
             <InputText v-model="form.horarioFim" type="time" class="w-full" />
           </div>
         </div>
+
         <div class="flex flex-col gap-2">
-          <label class="font-bold text-sm text-gray-700"
-            >Nível Alvo <span class="text-red-500">*</span></label
+          <div class="flex items-center justify-between">
+            <label class="font-bold text-sm text-gray-700"
+              >Nível Alvo <span class="text-red-500">*</span></label
+            >
+            <button
+              v-if="levelsStore.fetchError"
+              @click="levelsStore.refetchLevels()"
+              class="text-xs text-sky-600 hover:underline flex items-center gap-1"
+            >
+              <i class="pi pi-refresh text-[10px]"></i> Recarregar
+            </button>
+          </div>
+          <div
+            v-if="levelsStore.loading"
+            class="flex items-center gap-2 text-sm text-slate-400 py-2"
           >
+            <i class="pi pi-spin pi-spinner"></i> Carregando níveis...
+          </div>
+          <div
+            v-else-if="levelsStore.fetchError"
+            class="flex items-center gap-2 text-sm text-red-500 py-2"
+          >
+            <i class="pi pi-exclamation-circle"></i>
+            {{ levelsStore.fetchError }}
+          </div>
           <Select
+            v-else
             v-model="form.nivelAlvoId"
             :options="levelsStore.levels"
             optionLabel="nome"
@@ -152,6 +202,7 @@
             filter
           />
         </div>
+
         <div class="flex flex-col gap-2">
           <label class="font-bold text-sm text-gray-700"
             >Professor Responsável <span class="text-red-500">*</span></label
@@ -262,7 +313,7 @@
             class="text-center py-6 text-gray-500"
           >
             <i class="pi pi-users text-3xl mb-2 text-slate-300 block"></i>
-            Nenhum aluno matriculado nesta turma ainda.
+            Nenhum aluno matriculado nesta turma.
           </div>
 
           <ul
@@ -287,7 +338,7 @@
                   <p class="text-xs text-gray-500 mt-0.5">
                     Nível:
                     <span class="font-medium">{{
-                      student.nivelNome || 'Sem Nível'
+                      student.nivelNome ?? student.nivelAtual ?? 'Sem Nível'
                     }}</span>
                   </p>
                 </div>
@@ -331,7 +382,6 @@ import api from '@/core/services/api'
 import { useClassesStore } from '@/modules/classes/stores/classes'
 import { useLevelsStore } from '@/modules/levels/stores/levels'
 import { formatDays } from '@/core/utils/formatters'
-import type { AlunoDTO } from '@/core/types/api'
 
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -352,14 +402,12 @@ const showCreateModal = ref(false)
 const showStudentsModal = ref(false)
 const submitting = ref(false)
 const searchQuery = ref('')
+const filtroProfessor = ref('')
 const selectedClass = ref<any>(null)
 const professores = ref<any[]>([])
 
-// Alunos da turma selecionada (carregados via API)
 const classStudents = ref<any[]>([])
 const loadingClassStudents = ref(false)
-
-// Alunos disponíveis para matrícula
 const alunosSemTurma = ref<any[]>([])
 const alunoSelecionado = ref<string | null>(null)
 const transferirTurmaId = ref<Record<string, string>>({})
@@ -382,12 +430,50 @@ const weekDays = [
   { label: 'Sábado', value: 'SABADO' },
 ]
 
+const professoresUnicos = computed(() => {
+  const nomes = new Set<string>()
+  classesStore.classes.forEach((c: any) => {
+    if (c.professor?.nome) nomes.add(c.professor.nome)
+  })
+  return Array.from(nomes).sort()
+})
+
+const filteredClasses = computed(() => {
+  let list = classesStore.classes as any[]
+
+  if (searchQuery.value) {
+    const lower = searchQuery.value.toLowerCase()
+    list = list.filter(
+      (c) =>
+        (c.nome ?? '').toLowerCase().includes(lower) ||
+        (c.nivelAlvo?.nome ?? '').toLowerCase().includes(lower) ||
+        (c.professor?.nome ?? '').toLowerCase().includes(lower)
+    )
+  }
+
+  if (filtroProfessor.value) {
+    list = list.filter((c) => c.professor?.nome === filtroProfessor.value)
+  }
+
+  return list
+})
+
+function formatarHorario(horario: any): string {
+  if (!horario) return '--:--'
+  if (Array.isArray(horario)) {
+    const h = String(horario[0]).padStart(2, '0')
+    const m = String(horario[1] || 0).padStart(2, '0')
+    return `${h}:${m}`
+  }
+  return typeof horario === 'string' ? horario.substring(0, 5) : '--:--'
+}
+
 const carregarProfessores = async () => {
   try {
     const { data } = await api.get('/api/professores')
     professores.value = data
-  } catch (error) {
-    console.error('Erro ao buscar professores', error)
+  } catch (err) {
+    console.error('Erro ao buscar professores', err)
   }
 }
 
@@ -408,7 +494,7 @@ const carregarAlunosDaTurma = async (turmaUuid: string) => {
     toast.add({
       severity: 'error',
       summary: 'Erro',
-      detail: 'Falha ao carregar alunos da turma.',
+      detail: 'Falha ao carregar alunos.',
     })
   } finally {
     loadingClassStudents.value = false
@@ -422,33 +508,12 @@ onMounted(async () => {
     carregarProfessores(),
     carregarAlunosSemTurma(),
   ])
-})
 
-const filteredClasses = computed(() => {
-  if (!searchQuery.value) return classesStore.classes
-  const lower = searchQuery.value.toLowerCase()
-  return classesStore.classes.filter(
-    (c: any) =>
-      (c.nome ?? '').toLowerCase().includes(lower) ||
-      (c.nivelAlvo?.nome?.toLowerCase().includes(lower) ?? false) ||
-      (c.professor?.nome?.toLowerCase().includes(lower) ?? false)
-  )
+  window.addEventListener('levels-error', (e: Event) => {
+    const msg = (e as CustomEvent).detail
+    toast.add({ severity: 'warn', summary: 'Níveis', detail: msg, life: 5000 })
+  })
 })
-
-// === SOLUÇÃO DEFINITIVA DO ERRO DE RENDERIZAÇÃO ===
-// Esta função agora suporta o formato Array ([8, 30]) que o Spring Boot envia por padrão
-function formatarHorario(horario: any): string {
-  if (!horario) return '--:--'
-  if (Array.isArray(horario)) {
-    const h = String(horario[0]).padStart(2, '0')
-    const m = String(horario[1] || 0).padStart(2, '0')
-    return `${h}:${m}`
-  }
-  if (typeof horario === 'string') {
-    return horario.substring(0, 5)
-  }
-  return '--:--'
-}
 
 async function openClassStudentsModal(classItem: any) {
   selectedClass.value = classItem
@@ -467,6 +532,8 @@ function openCreateModal() {
     nivelAlvoId: null,
     professorId: null,
   }
+
+  if (levelsStore.levels.length === 0) levelsStore.refetchLevels()
   showCreateModal.value = true
 }
 
@@ -541,14 +608,14 @@ async function atualizarProfessor(novoProfessorId: string) {
     toast.add({
       severity: 'error',
       summary: 'Erro',
-      detail: e.response?.data?.message ?? 'Falha ao atualizar professor.',
+      detail: e.response?.data?.message ?? 'Falha.',
     })
   }
 }
 
 function confirmDelete(turma: any) {
   confirm.require({
-    message: `Tem certeza que deseja excluir a turma "${turma.nome}"?`,
+    message: `Excluir a turma "${turma.nome}"?`,
     header: 'Confirmar Exclusão',
     icon: 'pi pi-exclamation-triangle',
     rejectLabel: 'Cancelar',
@@ -556,19 +623,11 @@ function confirmDelete(turma: any) {
     acceptClass: 'p-button-danger',
     accept: async () => {
       const res = await classesStore.deleteClass(turma.uuid)
-      if (res.success) {
-        toast.add({
-          severity: 'success',
-          summary: 'Sucesso',
-          detail: 'Turma excluída.',
-        })
-      } else {
-        toast.add({
-          severity: 'error',
-          summary: 'Erro',
-          detail: 'Não foi possível excluir a turma.',
-        })
-      }
+      toast.add({
+        severity: res.success ? 'success' : 'error',
+        summary: res.success ? 'Sucesso' : 'Erro',
+        detail: res.success ? 'Turma excluída.' : 'Não foi possível excluir.',
+      })
     },
   })
 }

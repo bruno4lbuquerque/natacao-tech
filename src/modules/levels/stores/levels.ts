@@ -6,49 +6,52 @@ import type { NivelDTO } from '@/core/types/api'
 export const useLevelsStore = defineStore('levels', () => {
   const levels = ref<NivelDTO[]>([])
   const loading = ref(false)
+  const fetchError = ref<string | null>(null)
 
   async function fetchLevels() {
+    if (levels.value.length > 0 && !fetchError.value) return
+
     loading.value = true
+    fetchError.value = null
     try {
       const response = await api.get<NivelDTO[]>('/api/niveis')
-      levels.value = response.data
+      levels.value = Array.isArray(response.data) ? response.data : []
     } catch (error: any) {
       const status = error?.response?.status
-      if (status === 403) {
-        console.error(
-          'Acesso negado ao buscar níveis. Verifique as permissões do usuário ou o CORS do backend.'
-        )
-      } else {
-        console.error('Erro ao buscar níveis:', error)
-      }
+      const msg =
+        status === 403
+          ? 'Sem permissão para carregar níveis.'
+          : 'Falha ao carregar níveis.'
+      fetchError.value = msg
+      console.error('fetchLevels:', msg, error)
+      window.dispatchEvent(new CustomEvent('levels-error', { detail: msg }))
     } finally {
       loading.value = false
     }
   }
 
+  async function refetchLevels() {
+    levels.value = []
+    fetchError.value = null
+    await fetchLevels()
+  }
+
   async function createNivel(payload: any) {
-    try {
-      await api.post('/api/niveis', payload)
-      await fetchLevels()
-    } catch (error) {
-      console.error('Erro ao criar nível:', error)
-      throw error
-    }
+    await api.post('/api/niveis', payload)
+    await refetchLevels()
   }
 
   async function updateNivel(uuid: string, payload: any) {
-    try {
-      await api.put(`/api/niveis/${uuid}`, payload)
-    } catch (error) {
-      console.error('Erro ao atualizar nível:', error)
-      throw error
-    }
+    await api.put(`/api/niveis/${uuid}`, payload)
+    await refetchLevels()
   }
 
   return {
     levels,
     loading,
+    fetchError,
     fetchLevels,
+    refetchLevels,
     updateNivel,
     createNivel,
   }

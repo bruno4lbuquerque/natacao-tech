@@ -1,46 +1,46 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import api from '@/core/services/api'
+import { useAuthStore } from '@/core/stores/auth'
 import { useAssessmentsStore } from '@/modules/assessments/stores/assessments'
 
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import ConfirmDialog from 'primevue/confirmdialog'
 import Checkbox from 'primevue/checkbox'
+import Select from 'primevue/select'
 
 const toast = useToast()
 const confirm = useConfirm()
 const assessmentsStore = useAssessmentsStore()
+const authStore = useAuthStore()
 
 interface NivelResumo {
   uuid: string
   nome: string
   corTouca?: string | null
 }
-
 interface Turma {
   uuid: string
   nome: string
   nivelAlvo: NivelResumo | null
+  professor?: { uuid: string; nome: string } | null
 }
-
 interface Aluno {
   uuid: string
   nome: string
-  nivelAtual?: NivelResumo | null
+  nivelAtual?: NivelResumo | string | null
   nivelAtualNome?: string
   telefoneResponsavel?: string | null
 }
-
 interface Habilidade {
   uuid: string
   descricao: string
   categoria: string
   ativo: boolean
 }
-
 interface Historico {
   uuid: string
   dataAvaliacao: string
@@ -55,7 +55,7 @@ const observacoes = ref<Record<string, string>>({})
 const promoverManual = ref<Record<string, boolean>>({})
 const etapa = ref<number>(1)
 
-const turmas = ref<Turma[]>([])
+const todasTurmas = ref<Turma[]>([])
 const turmaSelecionada = ref<Turma | null>(null)
 const loadingTurmas = ref(false)
 const loadingAlunos = ref(false)
@@ -67,8 +67,11 @@ const buscaAluno = ref('')
 
 const perguntaAtual = ref(0)
 const respostas = ref<Record<string, Record<string, boolean>>>({})
-
 const salvando = ref(false)
+
+const filtroNivel = ref('')
+const filtroProfessor = ref('')
+const buscaTurma = ref('')
 
 const modalHistorico = ref(false)
 const alunoModal = ref<Aluno | null>(null)
@@ -76,6 +79,82 @@ const historico = ref<Historico[]>([])
 const loadingHistorico = ref(false)
 const baixandoPdf = ref<Record<string, boolean>>({})
 const enviandoWA = ref<Record<string, boolean>>({})
+
+const DRAFT_KEY = 'avaliacao_rascunho'
+
+function salvarRascunho() {
+  if (!turmaSelecionada.value || etapa.value < 3) return
+  const draft = {
+    turmaUuid: turmaSelecionada.value.uuid,
+    alunosSelecionados: Array.from(alunosSelecionados.value),
+    respostas: respostas.value,
+    perguntaAtual: perguntaAtual.value,
+    observacoes: observacoes.value,
+    promoverManual: promoverManual.value,
+    etapa: etapa.value,
+    ts: Date.now(),
+  }
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  } catch {}
+}
+
+function carregarRascunho(): boolean {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY)
+    if (!raw) return false
+    const draft = JSON.parse(raw)
+    // Expira após 4h
+    if (Date.now() - draft.ts > 4 * 60 * 60 * 1000) {
+      sessionStorage.removeItem(DRAFT_KEY)
+      return false
+    }
+    return draft
+  } catch {
+    return false
+  }
+}
+
+function limparRascunho() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY)
+  } catch {}
+}
+
+watch(respostas, salvarRascunho, { deep: true })
+watch(perguntaAtual, salvarRascunho)
+watch(etapa, salvarRascunho)
+
+const niveisUnicos = computed(() => {
+  const map = new Map<string, string>()
+  todasTurmas.value.forEach((t) => {
+    if (t.nivelAlvo) map.set(t.nivelAlvo.uuid, t.nivelAlvo.nome)
+  })
+  return Array.from(map.entries()).map(([uuid, nome]) => ({ uuid, nome }))
+})
+
+const professoresUnicos = computed(() => {
+  const map = new Map<string, string>()
+  todasTurmas.value.forEach((t) => {
+    if (t.professor) map.set(t.professor.uuid, t.professor.nome)
+  })
+  return Array.from(map.entries()).map(([uuid, nome]) => ({ uuid, nome }))
+})
+
+const turmasFiltradas = computed(() => {
+  let list = todasTurmas.value
+  if (buscaTurma.value) {
+    const q = buscaTurma.value.toLowerCase()
+    list = list.filter((t) => t.nome.toLowerCase().includes(q))
+  }
+  if (filtroNivel.value) {
+    list = list.filter((t) => t.nivelAlvo?.uuid === filtroNivel.value)
+  }
+  if (filtroProfessor.value) {
+    list = list.filter((t) => t.professor?.uuid === filtroProfessor.value)
+  }
+  return list
+})
 
 const alunosFiltrados = computed(() => {
   const q = buscaAluno.value.toLowerCase().trim()
@@ -94,15 +173,12 @@ const habilidadesAtivas = computed(() =>
 const perguntaCorrente = computed(
   () => habilidadesAtivas.value[perguntaAtual.value] ?? null
 )
-
 const totalPerguntas = computed(() => habilidadesAtivas.value.length)
-
 const progresso = computed(() =>
   totalPerguntas.value > 0
     ? Math.round(((perguntaAtual.value + 1) / totalPerguntas.value) * 100)
     : 0
 )
-
 const isUltimaPergunta = computed(
   () => perguntaAtual.value === totalPerguntas.value - 1
 )
@@ -130,26 +206,41 @@ const resultado = computed(() =>
   })
 )
 
-onMounted(carregarTurmas)
+onMounted(async () => {
+  await carregarTurmas()
 
-function irParaEtapa1() {
-  etapa.value = 1
-}
+  // Tenta restaurar rascunho
+  const draft = carregarRascunho() as any
+  if (draft && draft.turmaUuid) {
+    const turma = todasTurmas.value.find((t) => t.uuid === draft.turmaUuid)
+    if (turma) {
+      const confirmar = window.confirm(
+        `Existe uma avaliação em andamento para "${turma.nome}". Deseja continuar de onde parou?`
+      )
+      if (confirmar) {
+        await restaurarRascunho(turma, draft)
+      } else {
+        limparRascunho()
+      }
+    }
+  }
+})
 
-function irParaEtapa2() {
-  etapa.value = 2
-}
-
-function revisar() {
-  etapa.value = 3
-  perguntaAtual.value = 0
-}
+onUnmounted(() => {
+  if (etapa.value >= 3) salvarRascunho()
+})
 
 async function carregarTurmas() {
   loadingTurmas.value = true
   try {
-    const { data } = await api.get<Turma[]>('/api/turmas')
-    turmas.value = data
+    const endpoint = authStore.isCoordenador
+      ? '/api/turmas/todas'
+      : '/api/turmas'
+
+    const { data } = await api.get<Turma[]>(endpoint).catch(async () => {
+      return await api.get<Turma[]>('/api/turmas')
+    })
+    todasTurmas.value = Array.isArray(data) ? data : []
   } catch {
     toast.add({
       severity: 'error',
@@ -168,63 +259,110 @@ async function selecionarTurma(turma: Turma) {
   habilidades.value = []
   alunosSelecionados.value = new Set()
   buscaAluno.value = ''
+
   try {
     const { data: alunosData } = await api.get<Aluno[]>(
       `/api/turmas/${turma.uuid}/alunos`
     )
     alunos.value = alunosData
 
-    const nivelUuid =
-      turma.nivelAlvo?.uuid ?? alunosData[0]?.nivelAtual?.uuid ?? null
+    let nivelUuid: string | null = turma.nivelAlvo?.uuid ?? null
+
+    if (!nivelUuid && alunosData.length > 0) {
+      const primeiroAluno = alunosData[0]
+      const na = primeiroAluno?.nivelAtual
+      if (na && typeof na === 'object' && 'uuid' in na) {
+        nivelUuid = (na as NivelResumo).uuid
+      }
+      if (!nivelUuid && typeof na === 'string' && na) {
+        try {
+          const { data: niveis } = await api.get('/api/niveis')
+          const nivel = niveis.find((n: any) => n.nome === na)
+          nivelUuid = nivel?.uuid ?? null
+        } catch {}
+      }
+    }
+
     if (nivelUuid) {
       const { data: habsData } = await api.get<Habilidade[]>(
         `/api/niveis/${nivelUuid}/habilidades`
       )
       habilidades.value = habsData.filter((h) => h.ativo !== false)
+
+      if (habilidades.value.length === 0) {
+        toast.add({
+          severity: 'warn',
+          summary: 'Sem habilidades',
+          detail: `Nenhuma habilidade ativa cadastrada para o nível "${turma.nivelAlvo?.nome ?? 'desta turma'}". Cadastre em Admin > Habilidades.`,
+          life: 6000,
+        })
+      }
+    } else {
+      toast.add({
+        severity: 'warn',
+        summary: 'Nível não identificado',
+        detail:
+          'Esta turma não possui um nível alvo definido. Configure em Turmas > Editar.',
+        life: 6000,
+      })
     }
   } catch (e: any) {
     toast.add({
       severity: 'error',
       summary: 'Erro',
-      detail: e.response?.data?.message ?? 'Falha ao carregar dados.',
+      detail: (e.response?.data as any)?.message ?? 'Falha ao carregar dados.',
     })
   } finally {
     loadingAlunos.value = false
   }
 }
 
-function toggleAluno(uuid: string) {
-  if (alunosSelecionados.value.has(uuid)) {
-    alunosSelecionados.value.delete(uuid)
-  } else {
-    alunosSelecionados.value.add(uuid)
-  }
+async function restaurarRascunho(turma: Turma, draft: any) {
+  await selecionarTurma(turma)
+  alunosSelecionados.value = new Set(draft.alunosSelecionados ?? [])
+  respostas.value = draft.respostas ?? {}
+  perguntaAtual.value = draft.perguntaAtual ?? 0
+  observacoes.value = draft.observacoes ?? {}
+  promoverManual.value = draft.promoverManual ?? {}
+  etapa.value = draft.etapa ?? 3
 }
 
+function irParaEtapa1() {
+  etapa.value = 1
+}
+function irParaEtapa2() {
+  etapa.value = 2
+}
+function revisar() {
+  etapa.value = 3
+  perguntaAtual.value = 0
+}
+
+function toggleAluno(uuid: string) {
+  if (alunosSelecionados.value.has(uuid)) alunosSelecionados.value.delete(uuid)
+  else alunosSelecionados.value.add(uuid)
+}
 function selecionarTodos() {
   alunos.value.forEach((a) => alunosSelecionados.value.add(a.uuid))
 }
-
 function limparSelecao() {
   alunosSelecionados.value = new Set()
 }
 
 function avancarParaWizard() {
   if (alunosSelecionados.value.size === 0) {
-    toast.add({
+    return toast.add({
       severity: 'warn',
       summary: 'Atenção',
       detail: 'Selecione ao menos um aluno.',
     })
-    return
   }
   if (habilidadesAtivas.value.length === 0) {
-    toast.add({
+    return toast.add({
       severity: 'warn',
       summary: 'Atenção',
       detail: 'Nenhuma habilidade cadastrada para este nível.',
     })
-    return
   }
   respostas.value = {}
   habilidadesAtivas.value.forEach((h) => {
@@ -235,11 +373,10 @@ function avancarParaWizard() {
 }
 
 function responder(alunoUuid: string, valor: boolean) {
-  const hab = perguntaCorrente.value
-  if (!hab) return
-  if (!respostas.value[hab.uuid]) respostas.value[hab.uuid] = {}
-  const bloco = respostas.value[hab.uuid] as Record<string, boolean>
-  bloco[alunoUuid] = valor
+  const habUuid = perguntaCorrente.value?.uuid
+  if (!habUuid) return
+  if (!respostas.value[habUuid]) respostas.value[habUuid] = {}
+  ;(respostas.value[habUuid] as Record<string, boolean>)[alunoUuid] = valor
 }
 
 function getResposta(alunoUuid: string): boolean | undefined {
@@ -249,39 +386,29 @@ function getResposta(alunoUuid: string): boolean | undefined {
 }
 
 function marcarTodosSim() {
-  const hab = perguntaCorrente.value
-  if (!hab) return
-  if (!respostas.value[hab.uuid]) respostas.value[hab.uuid] = {}
-  const bloco = respostas.value[hab.uuid] as Record<string, boolean>
+  const habUuid = perguntaCorrente.value?.uuid
+  if (!habUuid) return
+  if (!respostas.value[habUuid]) respostas.value[habUuid] = {}
   alunosSelecionadosLista.value.forEach((a) => {
-    bloco[a.uuid] = true
+    ;(respostas.value[habUuid] as Record<string, boolean>)[a.uuid] = true
   })
 }
-
 function marcarTodosNao() {
-  const hab = perguntaCorrente.value
-  if (!hab) return
-  if (!respostas.value[hab.uuid]) respostas.value[hab.uuid] = {}
-  const bloco = respostas.value[hab.uuid] as Record<string, boolean>
+  const habUuid = perguntaCorrente.value?.uuid
+  if (!habUuid) return
+  if (!respostas.value[habUuid]) respostas.value[habUuid] = {}
   alunosSelecionadosLista.value.forEach((a) => {
-    bloco[a.uuid] = false
+    ;(respostas.value[habUuid] as Record<string, boolean>)[a.uuid] = false
   })
 }
 
 function proximaPergunta() {
-  if (!isUltimaPergunta.value) {
-    perguntaAtual.value++
-  } else {
-    etapa.value = 4
-  }
+  if (!isUltimaPergunta.value) perguntaAtual.value++
+  else etapa.value = 4
 }
-
 function voltarPergunta() {
-  if (perguntaAtual.value > 0) {
-    perguntaAtual.value--
-  } else {
-    etapa.value = 2
-  }
+  if (perguntaAtual.value > 0) perguntaAtual.value--
+  else etapa.value = 2
 }
 
 async function salvarAvaliacao() {
@@ -306,6 +433,7 @@ async function salvarAvaliacao() {
           })),
         }
         await api.post('/api/avaliacoes/lote', payload)
+        limparRascunho()
         toast.add({
           severity: 'success',
           summary: 'Avaliação salva!',
@@ -317,7 +445,7 @@ async function salvarAvaliacao() {
         toast.add({
           severity: 'error',
           summary: 'Erro ao salvar',
-          detail: e.response?.data?.message ?? 'Falha ao salvar avaliação.',
+          detail: (e.response?.data as any)?.message ?? 'Falha ao salvar.',
         })
       } finally {
         salvando.value = false
@@ -337,6 +465,9 @@ function reiniciar() {
   promoverManual.value = {}
   perguntaAtual.value = 0
   buscaAluno.value = ''
+  buscaTurma.value = ''
+  filtroNivel.value = ''
+  filtroProfessor.value = ''
 }
 
 async function abrirHistorico(aluno: Aluno) {
@@ -361,9 +492,7 @@ async function abrirHistorico(aluno: Aluno) {
 async function baixarPdf(hist: Historico) {
   baixandoPdf.value[hist.uuid] = true
   try {
-    if (assessmentsStore.downloadAvaliacaoPdf) {
-      await assessmentsStore.downloadAvaliacaoPdf(hist.uuid)
-    }
+    await assessmentsStore.downloadAvaliacaoPdf(hist.uuid)
     toast.add({ severity: 'success', summary: 'PDF baixado!', life: 3000 })
   } catch {
     toast.add({
@@ -382,11 +511,30 @@ async function enviarWhatsApp(hist: Historico) {
     await api.post(`/api/whatsapp/enviar-avaliacao/${hist.uuid}`)
     toast.add({ severity: 'success', summary: 'WhatsApp enviado!', life: 5000 })
   } catch (e: any) {
-    toast.add({
-      severity: 'error',
-      summary: 'Erro ao enviar',
-      detail: e.response?.data?.message ?? 'Falha ao enviar.',
-    })
+    const status = e.response?.status
+    if (!status || status === 404 || status === 501) {
+      const telefone =
+        alunoModal.value?.telefoneResponsavel?.replace(/\D/g, '') ?? ''
+      const texto = encodeURIComponent(
+        `Olá! O relatório de avaliação do(a) ${alunoModal.value?.nome ?? 'aluno'} está disponível no sistema AcquOn.`
+      )
+      const url = telefone
+        ? `https://wa.me/55${telefone}?text=${texto}`
+        : `https://wa.me/?text=${texto}`
+      window.open(url, '_blank')
+      toast.add({
+        severity: 'info',
+        summary: 'Abrindo WhatsApp',
+        detail: 'Redirecionado para WhatsApp Web.',
+        life: 4000,
+      })
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Erro ao enviar',
+        detail: (e.response?.data as any)?.message ?? 'Falha ao enviar.',
+      })
+    }
   } finally {
     enviandoWA.value[hist.uuid] = false
   }
@@ -415,12 +563,12 @@ function formatarData(dt: string | number[]): string {
 }
 
 function getNivelNome(aluno: Aluno): string {
-  return (
-    turmaSelecionada.value?.nivelAlvo?.nome ??
-    aluno.nivelAtual?.nome ??
-    aluno.nivelAtualNome ??
-    ''
-  )
+  if (turmaSelecionada.value?.nivelAlvo?.nome)
+    return turmaSelecionada.value.nivelAlvo.nome
+  if (typeof aluno.nivelAtual === 'object' && aluno.nivelAtual)
+    return aluno.nivelAtual.nome
+  if (typeof aluno.nivelAtual === 'string') return aluno.nivelAtual
+  return aluno.nivelAtualNome ?? ''
 }
 
 function getCorTouca(cor: string | null | undefined): Record<string, string> {
@@ -432,7 +580,6 @@ function avatarCls(resp: boolean | undefined): string {
   if (resp === false) return 'bg-gradient-to-br from-red-400 to-red-500'
   return 'bg-slate-200'
 }
-
 function avatarTxtCls(resp: boolean | undefined): string {
   return resp === undefined ? 'text-slate-500' : 'text-white'
 }
@@ -450,46 +597,98 @@ function avatarTxtCls(resp: boolean | undefined): string {
         <p class="text-slate-400 text-sm mt-0.5">
           <span v-if="etapa === 1">Selecione a turma para iniciar</span>
           <span v-else-if="etapa === 2">Escolha os alunos a avaliar</span>
-          <span v-else-if="etapa === 3">
-            Pergunta {{ perguntaAtual + 1 }} de {{ totalPerguntas }}
-          </span>
+          <span v-else-if="etapa === 3"
+            >Pergunta {{ perguntaAtual + 1 }} de {{ totalPerguntas }}</span
+          >
           <span v-else>Resumo da avaliação</span>
         </p>
       </div>
 
-      <div class="hidden sm:flex items-center gap-1">
-        <div
-          v-for="n in [1, 2, 3, 4]"
-          :key="n"
-          class="flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition-all"
-          :class="
-            etapa === n
-              ? 'bg-sky-500 text-white shadow-sm shadow-sky-200'
-              : etapa > n
-                ? 'bg-emerald-100 text-emerald-600'
-                : 'bg-slate-100 text-slate-400'
-          "
+      <div class="flex items-center gap-3">
+        <span
+          v-if="etapa >= 3"
+          class="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-full flex items-center gap-1"
         >
-          <i v-if="etapa > n" class="pi pi-check" style="font-size: 0.6rem"></i>
-          <span v-else>{{ n }}</span>
+          <i class="pi pi-save text-[9px]"></i> Auto-salvo
+        </span>
+
+        <!-- Steps -->
+        <div class="hidden sm:flex items-center gap-1">
+          <div
+            v-for="n in [1, 2, 3, 4]"
+            :key="n"
+            class="flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition-all"
+            :class="
+              etapa === n
+                ? 'bg-sky-500 text-white shadow-sm shadow-sky-200'
+                : etapa > n
+                  ? 'bg-emerald-100 text-emerald-600'
+                  : 'bg-slate-100 text-slate-400'
+            "
+          >
+            <i
+              v-if="etapa > n"
+              class="pi pi-check"
+              style="font-size: 0.6rem"
+            ></i>
+            <span v-else>{{ n }}</span>
+          </div>
         </div>
       </div>
     </div>
 
     <template v-if="etapa === 1">
-      <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-        <p
-          class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4"
-        >
-          <i class="pi pi-calendar mr-1.5 text-sky-400"></i>Selecione a turma
+      <div
+        class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3"
+      >
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <i class="pi pi-filter mr-1.5 text-sky-400"></i>Filtros
         </p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="relative">
+            <i
+              class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none"
+            ></i>
+            <input
+              v-model="buscaTurma"
+              type="text"
+              placeholder="Buscar turma..."
+              class="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 bg-slate-50 placeholder:text-slate-400"
+            />
+          </div>
 
+          <Select
+            v-model="filtroNivel"
+            :options="[{ uuid: '', nome: 'Todos os níveis' }, ...niveisUnicos]"
+            optionLabel="nome"
+            optionValue="uuid"
+            placeholder="Todos os níveis"
+            class="w-full text-sm"
+          />
+          <Select
+            v-model="filtroProfessor"
+            :options="[
+              { uuid: '', nome: 'Todos os professores' },
+              ...professoresUnicos,
+            ]"
+            optionLabel="nome"
+            optionValue="uuid"
+            placeholder="Todos os professores"
+            class="w-full text-sm"
+          />
+        </div>
+        <p class="text-xs text-slate-400">
+          {{ turmasFiltradas.length }} turma(s) encontrada(s)
+        </p>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
         <div v-if="loadingTurmas" class="flex justify-center py-10">
           <i class="pi pi-spin pi-spinner text-3xl text-sky-400"></i>
         </div>
 
         <div
-          v-else-if="turmas.length === 0"
+          v-else-if="turmasFiltradas.length === 0"
           class="text-center py-10 text-slate-400"
         >
           <i class="pi pi-calendar text-4xl mb-2 block"></i>
@@ -498,7 +697,7 @@ function avatarTxtCls(resp: boolean | undefined): string {
 
         <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
-            v-for="turma in turmas"
+            v-for="turma in turmasFiltradas"
             :key="turma.uuid"
             @click="selecionarTurma(turma)"
             class="flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left hover:border-sky-300 hover:bg-sky-50 group"
@@ -517,20 +716,25 @@ function avatarTxtCls(resp: boolean | undefined): string {
               <p class="font-semibold text-slate-800 text-sm truncate">
                 {{ turma.nome }}
               </p>
-              <p
-                v-if="turma.nivelAlvo"
-                class="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5"
-              >
-                <span
-                  class="w-2.5 h-2.5 rounded-full inline-block border border-white/30"
-                  :style="
-                    turma.nivelAlvo.corTouca
-                      ? { backgroundColor: turma.nivelAlvo.corTouca }
-                      : { backgroundColor: '#0ea5e9' }
-                  "
-                ></span>
-                {{ turma.nivelAlvo.nome }}
-              </p>
+              <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+                <p
+                  v-if="turma.nivelAlvo"
+                  class="text-xs text-slate-500 flex items-center gap-1.5"
+                >
+                  <span
+                    class="w-2.5 h-2.5 rounded-full inline-block border border-white/30"
+                    :style="
+                      turma.nivelAlvo.corTouca
+                        ? { backgroundColor: turma.nivelAlvo.corTouca }
+                        : { backgroundColor: '#0ea5e9' }
+                    "
+                  ></span>
+                  {{ turma.nivelAlvo.nome }}
+                </p>
+                <p v-if="turma.professor" class="text-xs text-slate-400">
+                  <i class="pi pi-user mr-0.5"></i>{{ turma.professor.nome }}
+                </p>
+              </div>
             </div>
             <i
               v-if="turmaSelecionada?.uuid === turma.uuid && !loadingAlunos"
@@ -612,7 +816,7 @@ function avatarTxtCls(resp: boolean | undefined): string {
               v-model="buscaAluno"
               type="text"
               placeholder="Buscar aluno por nome..."
-              class="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 bg-slate-50 placeholder:text-slate-400"
+              class="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 bg-slate-50 placeholder:text-slate-400"
             />
           </div>
           <div class="flex items-center justify-between">
@@ -664,7 +868,7 @@ function avatarTxtCls(resp: boolean | undefined): string {
               ></i>
             </div>
             <div
-              class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-all"
+              class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0"
               :class="
                 alunosSelecionados.has(aluno.uuid)
                   ? 'bg-gradient-to-br from-sky-400 to-blue-600 text-white'
@@ -692,7 +896,6 @@ function avatarTxtCls(resp: boolean | undefined): string {
               <i class="pi pi-history text-xs"></i>
             </button>
           </div>
-
           <div
             v-if="alunosFiltrados.length === 0"
             class="text-center py-8 text-slate-400 text-sm"
@@ -727,9 +930,9 @@ function avatarTxtCls(resp: boolean | undefined): string {
             class="text-xs font-bold text-slate-500 uppercase tracking-wider"
             >Progresso</span
           >
-          <span class="text-xs font-bold text-sky-600">
-            {{ perguntaAtual + 1 }}/{{ totalPerguntas }}
-          </span>
+          <span class="text-xs font-bold text-sky-600"
+            >{{ perguntaAtual + 1 }}/{{ totalPerguntas }}</span
+          >
         </div>
         <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
           <div
@@ -739,15 +942,15 @@ function avatarTxtCls(resp: boolean | undefined): string {
         </div>
         <div class="flex items-center justify-between mt-2">
           <p class="text-xs text-slate-400">
-            <i class="pi pi-tag mr-1 text-slate-300"></i>
-            {{ perguntaCorrente.categoria }}
+            <i class="pi pi-tag mr-1 text-slate-300"></i
+            >{{ perguntaCorrente.categoria }}
           </p>
           <p
             v-if="semRespostaAtual > 0"
             class="text-xs text-amber-500 font-semibold"
           >
-            <i class="pi pi-exclamation-circle mr-1"></i>
-            {{ semRespostaAtual }} sem resposta
+            <i class="pi pi-exclamation-circle mr-1"></i
+            >{{ semRespostaAtual }} sem resposta
           </p>
           <p v-else class="text-xs text-emerald-500 font-semibold">
             <i class="pi pi-check-circle mr-1"></i>Todos respondidos
@@ -760,9 +963,9 @@ function avatarTxtCls(resp: boolean | undefined): string {
       >
         <div class="flex items-center gap-2 mb-3 opacity-70">
           <i class="pi pi-question-circle text-sm"></i>
-          <span class="text-xs font-bold uppercase tracking-wider">
-            Pergunta {{ perguntaAtual + 1 }}
-          </span>
+          <span class="text-xs font-bold uppercase tracking-wider"
+            >Pergunta {{ perguntaAtual + 1 }}</span
+          >
         </div>
         <h2 class="text-xl md:text-2xl font-bold leading-snug">
           {{ perguntaCorrente.descricao }}
@@ -970,12 +1173,12 @@ function avatarTxtCls(resp: boolean | undefined): string {
 
           <div class="mt-4 mb-4 pt-4 border-t border-slate-50">
             <label class="block text-xs font-bold text-slate-500 mb-1.5"
-              >Feedback / Observações (Opcional)</label
+              >Feedback / Observações</label
             >
             <textarea
               v-model="observacoes[item.aluno.uuid]"
               rows="2"
-              placeholder="Adicione um comentário sobre o desempenho do aluno para constar no relatório..."
+              placeholder="Adicione um comentário sobre o desempenho..."
               class="w-full text-sm border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 resize-none bg-slate-50"
             ></textarea>
           </div>
@@ -990,7 +1193,7 @@ function avatarTxtCls(resp: boolean | undefined): string {
               :for="'promo_' + item.aluno.uuid"
               class="text-xs font-semibold text-slate-600 cursor-pointer select-none"
             >
-              Forçar promoção de nível (Sobrescreve a regra automática)
+              Forçar promoção de nível
             </label>
           </div>
 
@@ -1052,6 +1255,13 @@ function avatarTxtCls(resp: boolean | undefined): string {
           </h3>
           <p class="text-sm text-slate-400 mt-0.5">
             <i class="pi pi-user mr-1"></i>{{ alunoModal?.nome }}
+            <span
+              v-if="alunoModal?.telefoneResponsavel"
+              class="ml-2 text-sky-600"
+            >
+              <i class="pi pi-whatsapp mr-0.5"></i
+              >{{ alunoModal.telefoneResponsavel }}
+            </span>
           </p>
         </div>
       </template>
@@ -1062,9 +1272,7 @@ function avatarTxtCls(resp: boolean | undefined): string {
 
       <div v-else-if="historico.length === 0" class="text-center py-10">
         <i class="pi pi-inbox text-5xl text-slate-200 mb-3 block"></i>
-        <p class="text-slate-400 font-medium">
-          Nenhuma avaliação registrada ainda.
-        </p>
+        <p class="text-slate-400 font-medium">Nenhuma avaliação registrada.</p>
       </div>
 
       <div v-else class="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
@@ -1086,13 +1294,12 @@ function avatarTxtCls(resp: boolean | undefined): string {
                 <span
                   v-if="hist.promovido"
                   class="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"
+                  >🏆 Promovido</span
                 >
-                  🏆 Promovido
-                </span>
               </div>
               <p class="text-xs text-slate-500">
-                <i class="pi pi-calendar mr-1"></i>
-                {{ formatarData(hist.dataAvaliacao) }}
+                <i class="pi pi-calendar mr-1"></i
+                >{{ formatarData(hist.dataAvaliacao) }}
                 <span class="mx-2 text-slate-300">·</span>
                 {{ hist.pontuacaoTotal }} habilidade(s) aprovada(s)
               </p>
