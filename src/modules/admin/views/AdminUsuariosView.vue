@@ -486,6 +486,7 @@ async function confirmarPromoverDiretor() {
       `/api/usuarios/${profParaPromover.value.uuid}/promover-diretor`,
       { academiaId: academiaIdParaDiretor.value }
     )
+
     toast.add({
       severity: 'success',
       summary: `${profParaPromover.value.nome} agora é Diretor!`,
