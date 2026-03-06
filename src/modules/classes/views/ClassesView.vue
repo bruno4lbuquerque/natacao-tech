@@ -80,7 +80,7 @@
               {{ turma.nome?.charAt(0)?.toUpperCase() ?? '?' }}
             </div>
             <Tag
-              :value="turma.nivelAlvo?.nome || 'Multinível'"
+              :value="turma.nivelAlvo?.nome || turma.nivelNome || 'Multinível'"
               severity="info"
               class="text-xs"
             />

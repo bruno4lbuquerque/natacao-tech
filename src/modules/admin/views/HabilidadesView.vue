@@ -15,7 +15,6 @@ const vTooltip = Tooltip
 const toast = useToast()
 const confirm = useConfirm()
 
-// ── Estado ──────────────────────────────────────────────────────────────
 const niveis = ref<any[]>([])
 const habilidades = ref<any[]>([])
 const nivelSelecionado = ref<any>(null)
@@ -40,7 +39,6 @@ const categoriasDisponiveis = [
   'Outro',
 ]
 
-// ── Computed ─────────────────────────────────────────────────────────────
 const nivelOptions = computed(() =>
   niveis.value.map((n) => ({ label: n.nome, value: n }))
 )
@@ -58,17 +56,19 @@ const habilidadesPorCategoria = computed(() => {
   return grupos
 })
 
-// ── Lifecycle ─────────────────────────────────────────────────────────────
 onMounted(async () => {
   await carregarNiveis()
 })
 
-// ── Funções ───────────────────────────────────────────────────────────────
 async function carregarNiveis() {
   try {
-    const { data } = await api.get('/api/niveis')
-    niveis.value = data
-  } catch {
+    const response = await api.get('/api/niveis')
+
+    const dados = response.data?.content || response.data || response
+
+    niveis.value = Array.isArray(dados) ? dados : []
+  } catch (error) {
+    console.error('Erro detalhado ao carregar níveis:', error)
     toast.add({
       severity: 'error',
       summary: 'Erro',

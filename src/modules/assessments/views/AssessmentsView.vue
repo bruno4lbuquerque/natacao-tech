@@ -281,8 +281,10 @@ async function selecionarTurma(turma: Turma) {
       const { data: habsData } = await api.get<Habilidade[]>(
         `/api/niveis/${nivelUuid}/habilidades`
       )
-      habilidades.value = habsData.filter((h) => h.ativo !== false)
-
+      const lista = Array.isArray(habsData)
+        ? habsData
+        : (habsData as any).content || []
+      habilidades.value = lista.filter((h: any) => h.ativo !== false)
       if (habilidades.value.length === 0) {
         toast.add({
           severity: 'warn',

@@ -11,6 +11,10 @@ const isDiretorOuAcima = computed(() =>
   ['ADMIN', 'DIRETOR', 'COORDENADOR'].includes(auth.role ?? '')
 )
 
+const isAdminOuDiretor = computed(() =>
+  ['ADMIN', 'DIRETOR'].includes(auth.role ?? '')
+)
+
 const menuItems = computed(() => {
   const items = [
     { label: 'Dashboard', icon: 'pi pi-home', route: '/' },
@@ -198,26 +202,6 @@ function isActive(path: string) {
         </a>
 
         <a
-          @click="navigate('/admin/academias')"
-          class="flex items-center gap-3.5 px-4 py-3.5 mx-4 rounded-2xl cursor-pointer transition-all duration-300 font-semibold group relative overflow-hidden"
-          :class="
-            isActive('/admin/academias')
-              ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-[0_8px_16px_-4px_rgba(14,165,233,0.4)]'
-              : 'text-slate-500 hover:bg-sky-50/50 hover:text-sky-700'
-          "
-        >
-          <i
-            :class="[
-              'pi pi-building text-[1.1rem] transition-transform group-hover:scale-110 duration-300',
-              isActive('/admin/academias')
-                ? 'text-white drop-shadow-md'
-                : 'text-slate-400 group-hover:text-sky-500',
-            ]"
-          />
-          <span class="text-[13px] tracking-wide">Academias</span>
-        </a>
-
-        <a
           @click="navigate('/students')"
           class="flex items-center gap-3.5 px-4 py-3.5 mx-4 rounded-2xl cursor-pointer transition-all duration-300 font-semibold group relative overflow-hidden"
           :class="
@@ -236,6 +220,68 @@ function isActive(path: string) {
           />
           <span class="text-[13px] tracking-wide">Alunos</span>
         </a>
+
+        <template v-if="isAdminOuDiretor">
+          <a
+            @click="navigate('/admin/academias')"
+            class="flex items-center gap-3.5 px-4 py-3.5 mx-4 rounded-2xl cursor-pointer transition-all duration-300 font-semibold group relative overflow-hidden"
+            :class="
+              isActive('/admin/academias')
+                ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-[0_8px_16px_-4px_rgba(14,165,233,0.4)]'
+                : 'text-slate-500 hover:bg-sky-50/50 hover:text-sky-700'
+            "
+          >
+            <i
+              :class="[
+                'pi pi-building text-[1.1rem] transition-transform group-hover:scale-110 duration-300',
+                isActive('/admin/academias')
+                  ? 'text-white drop-shadow-md'
+                  : 'text-slate-400 group-hover:text-sky-500',
+              ]"
+            />
+            <span class="text-[13px] tracking-wide">Academias</span>
+          </a>
+
+          <a
+            @click="navigate('/admin/niveis')"
+            class="flex items-center gap-3.5 px-4 py-3.5 mx-4 rounded-2xl cursor-pointer transition-all duration-300 font-semibold group relative overflow-hidden"
+            :class="
+              isActive('/admin/niveis')
+                ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-[0_8px_16px_-4px_rgba(14,165,233,0.4)]'
+                : 'text-slate-500 hover:bg-sky-50/50 hover:text-sky-700'
+            "
+          >
+            <i
+              :class="[
+                'pi pi-star text-[1.1rem] transition-transform group-hover:scale-110 duration-300',
+                isActive('/admin/niveis')
+                  ? 'text-white drop-shadow-md'
+                  : 'text-slate-400 group-hover:text-sky-500',
+              ]"
+            />
+            <span class="text-[13px] tracking-wide">Níveis</span>
+          </a>
+
+          <a
+            @click="navigate('/admin/habilidades')"
+            class="flex items-center gap-3.5 px-4 py-3.5 mx-4 rounded-2xl cursor-pointer transition-all duration-300 font-semibold group relative overflow-hidden"
+            :class="
+              isActive('/admin/habilidades')
+                ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-[0_8px_16px_-4px_rgba(14,165,233,0.4)]'
+                : 'text-slate-500 hover:bg-sky-50/50 hover:text-sky-700'
+            "
+          >
+            <i
+              :class="[
+                'pi pi-list text-[1.1rem] transition-transform group-hover:scale-110 duration-300',
+                isActive('/admin/habilidades')
+                  ? 'text-white drop-shadow-md'
+                  : 'text-slate-400 group-hover:text-sky-500',
+              ]"
+            />
+            <span class="text-[13px] tracking-wide">Habilidades</span>
+          </a>
+        </template>
       </template>
     </div>
 

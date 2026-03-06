@@ -28,6 +28,8 @@ export const useStudentsStore = defineStore('students', () => {
       listaTurmas = a.nomesTurmas
     } else if (typeof a.turmas === 'string' && a.turmas.trim()) {
       listaTurmas = a.turmas.split(',').map((t: string) => t.trim())
+    } else if (typeof a.nomesTurmas === 'string' && a.nomesTurmas.trim()) {
+      listaTurmas = a.nomesTurmas.split(',').map((t: string) => t.trim())
     }
 
     const nivelAtualNome =
