@@ -80,6 +80,8 @@ const loadingHistorico = ref(false)
 const baixandoPdf = ref<Record<string, boolean>>({})
 const enviandoWA = ref<Record<string, boolean>>({})
 
+const modalConfirmarSalvar = ref(false)
+
 const DRAFT_KEY = 'avaliacao_rascunho'
 
 function salvarRascunho() {
@@ -104,7 +106,6 @@ function carregarRascunho(): boolean {
     const raw = sessionStorage.getItem(DRAFT_KEY)
     if (!raw) return false
     const draft = JSON.parse(raw)
-    // Expira após 4h
     if (Date.now() - draft.ts > 4 * 60 * 60 * 1000) {
       sessionStorage.removeItem(DRAFT_KEY)
       return false
@@ -209,7 +210,6 @@ const resultado = computed(() =>
 onMounted(async () => {
   await carregarTurmas()
 
-  // Tenta restaurar rascunho
   const draft = carregarRascunho() as any
   if (draft && draft.turmaUuid) {
     const turma = todasTurmas.value.find((t) => t.uuid === draft.turmaUuid)
@@ -407,47 +407,94 @@ function voltarPergunta() {
   else etapa.value = 2
 }
 
-async function salvarAvaliacao() {
-  confirm.require({
-    message: `Salvar avaliação de ${alunosSelecionadosLista.value.length} aluno(s)?`,
-    header: 'Confirmar Avaliação',
-    icon: 'pi pi-check-circle',
-    acceptLabel: 'Salvar',
-    rejectLabel: 'Revisar',
-    accept: async () => {
-      salvando.value = true
-      try {
-        const payload = {
-          turmaId: turmaSelecionada.value!.uuid,
-          avaliacoes: alunosSelecionadosLista.value.map((aluno) => ({
-            alunoId: aluno.uuid,
-            habilidadesAprovadasIds: habilidadesAtivas.value
-              .filter((h) => respostas.value[h.uuid]?.[aluno.uuid] === true)
-              .map((h) => h.uuid),
-            observacao: observacoes.value[aluno.uuid] || null,
-            promoverManual: promoverManual.value[aluno.uuid] || false,
-          })),
+function pedirConfirmacaoSalvar() {
+  modalConfirmarSalvar.value = true
+}
+
+async function executarSalvarAvaliacao() {
+  modalConfirmarSalvar.value = false
+  salvando.value = true
+
+  try {
+    if (!turmaSelecionada.value) {
+      throw new Error('Nenhuma turma selecionada.')
+    }
+
+    const payload = {
+      turmaId: turmaSelecionada.value.uuid,
+      avaliacoes: alunosSelecionadosLista.value.map((aluno) => {
+        const habilidadesAprovadas = habilidadesAtivas.value
+          .filter((h) => {
+            const resp = respostas.value[h.uuid]
+            return resp !== undefined && resp[aluno.uuid] === true
+          })
+          .map((h) => h.uuid)
+
+        return {
+          alunoId: aluno.uuid,
+          habilidadesAprovadasIds: habilidadesAprovadas,
+          observacao: observacoes.value[aluno.uuid]?.trim() || null,
+          promoverManual: promoverManual.value[aluno.uuid] === true,
         }
-        await api.post('/api/avaliacoes/lote', payload)
-        limparRascunho()
-        toast.add({
-          severity: 'success',
-          summary: 'Avaliação salva!',
-          detail: `${alunosSelecionadosLista.value.length} aluno(s) avaliado(s).`,
-          life: 5000,
-        })
-        reiniciar()
-      } catch (e: any) {
-        toast.add({
-          severity: 'error',
-          summary: 'Erro ao salvar',
-          detail: (e.response?.data as any)?.message ?? 'Falha ao salvar.',
-        })
-      } finally {
-        salvando.value = false
-      }
-    },
-  })
+      }),
+    }
+
+    console.log(
+      '[Avaliação] Payload enviado:',
+      JSON.stringify(payload, null, 2)
+    )
+
+    await api.post('/api/avaliacoes/lote', payload)
+
+    limparRascunho()
+    toast.add({
+      severity: 'success',
+      summary: 'Avaliação salva!',
+      detail: `${alunosSelecionadosLista.value.length} aluno(s) avaliado(s) com sucesso.`,
+      life: 5000,
+    })
+    reiniciar()
+  } catch (e: any) {
+    const status = e.response?.status
+    const data = e.response?.data
+
+    let detalhe = 'Falha ao salvar avaliação.'
+
+    if (typeof data === 'string' && data.trim()) {
+      detalhe = data
+    } else if (data?.message) {
+      detalhe = data.message
+    } else if (data?.mensagem) {
+      detalhe = data.mensagem
+    } else if (data?.errors && Array.isArray(data.errors)) {
+      detalhe = data.errors
+        .map(
+          (err: any) => `${err.field ?? err.objectName}: ${err.defaultMessage}`
+        )
+        .join(' | ')
+    } else if (data?.erros && Array.isArray(data.erros)) {
+      detalhe = data.erros
+        .map((err: any) => `${err.campo}: ${err.erro}`)
+        .join(' | ')
+    } else if (e.message) {
+      detalhe = e.message
+    }
+
+    console.error('[Avaliação] Erro ao salvar:', { status, data, detalhe })
+
+    toast.add({
+      severity: 'error',
+      summary: `Erro ao salvar${status ? ` (${status})` : ''}`,
+      detail: detalhe,
+      life: 8000,
+    })
+  } finally {
+    salvando.value = false
+  }
+}
+
+function salvarAvaliacao() {
+  pedirConfirmacaoSalvar()
 }
 
 function reiniciar() {
@@ -585,6 +632,37 @@ function avatarTxtCls(resp: boolean | undefined): string {
   <div class="max-w-3xl mx-auto space-y-5 p-4">
     <ConfirmDialog />
 
+    <Dialog
+      v-model:visible="modalConfirmarSalvar"
+      modal
+      header="Confirmar Avaliação"
+      :style="{ width: '24rem' }"
+    >
+      <div class="pt-2 pb-4 text-slate-600 text-sm">
+        <p>
+          Salvar avaliação de
+          <strong>{{ alunosSelecionadosLista.length }} aluno(s)</strong>?
+        </p>
+        <p class="text-xs text-slate-400 mt-2">
+          Esta ação registrará o desempenho e não poderá ser desfeita.
+        </p>
+      </div>
+      <template #footer>
+        <Button
+          label="Revisar"
+          text
+          severity="secondary"
+          @click="modalConfirmarSalvar = false"
+        />
+        <Button
+          label="Salvar"
+          icon="pi pi-check"
+          :loading="salvando"
+          @click="executarSalvarAvaliacao"
+        />
+      </template>
+    </Dialog>
+
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-slate-800 tracking-tight">
@@ -608,7 +686,6 @@ function avatarTxtCls(resp: boolean | undefined): string {
           <i class="pi pi-save text-[9px]"></i> Auto-salvo
         </span>
 
-        <!-- Steps -->
         <div class="hidden sm:flex items-center gap-1">
           <div
             v-for="n in [1, 2, 3, 4]"
@@ -1090,7 +1167,6 @@ function avatarTxtCls(resp: boolean | undefined): string {
         </button>
       </div>
     </template>
-
     <template v-else-if="etapa === 4">
       <div
         class="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-lg shadow-emerald-200/50"

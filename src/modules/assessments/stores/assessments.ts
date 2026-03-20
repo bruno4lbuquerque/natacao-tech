@@ -38,23 +38,30 @@ export const useAssessmentsStore = defineStore('assessments', () => {
     }
   }
 
-  async function submitEvaluation(turmaUuid: string, evaluations: any[]) {
+  async function submitEvaluation(
+    turmaUuid: string,
+    evaluations: Array<{
+      alunoId: string
+      habilidadesAprovadasIds: string[]
+      observacao?: string | null
+      promoverManual?: boolean
+    }>
+  ) {
     loading.value = true
     try {
       const payload = {
         turmaId: turmaUuid,
         avaliacoes: evaluations.map((ev) => ({
-          alunoId: ev.studentId,
-          habilidadesAprovadasIds: ev.approvedSkills,
-          observacao: ev.feedback,
-          promoverManual: ev.promoted,
+          alunoId: ev.alunoId,
+          habilidadesAprovadasIds: ev.habilidadesAprovadasIds ?? [],
+          observacao: ev.observacao ?? null,
+          promoverManual: ev.promoverManual ?? false,
         })),
       }
 
       await api.post('/api/avaliacoes/lote', payload)
-
       return { success: true }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao enviar avaliação:', error)
       return { success: false, error }
     } finally {
