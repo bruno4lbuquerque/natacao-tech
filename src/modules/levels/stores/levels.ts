@@ -7,10 +7,13 @@ export const useLevelsStore = defineStore('levels', () => {
   const levels = ref<NivelDTO[]>([])
   const loading = ref(false)
   const fetchError = ref<string | null>(null)
+  const isFetching = ref(false)
 
   async function fetchLevels() {
     if (levels.value.length > 0 && !fetchError.value) return
+    if (isFetching.value) return
 
+    isFetching.value = true
     loading.value = true
     fetchError.value = null
     try {
@@ -27,10 +30,12 @@ export const useLevelsStore = defineStore('levels', () => {
       window.dispatchEvent(new CustomEvent('levels-error', { detail: msg }))
     } finally {
       loading.value = false
+      isFetching.value = false
     }
   }
 
   async function refetchLevels() {
+    if (isFetching.value) return
     levels.value = []
     fetchError.value = null
     await fetchLevels()

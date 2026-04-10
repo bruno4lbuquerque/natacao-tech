@@ -55,6 +55,7 @@ const todasTurmas = ref<Turma[]>([])
 const turmasSelecionadas = ref<Turma[]>([])
 const loadingTurmas = ref(false)
 const loadingAlunos = ref(false)
+const isCarregandoAlunos = ref(false) // flag de inflight
 
 const alunos = ref<Aluno[]>([])
 const habilidades = ref<Habilidade[]>([])
@@ -83,7 +84,7 @@ const DRAFT_KEY = 'avaliacao_rascunho'
 function salvarRascunho() {
   if (turmasSelecionadas.value.length === 0 || etapa.value < 3) return
   const draft = {
-    turmaUuids: turmasSelecionadas.value.map(t => t.uuid),
+    turmaUuids: turmasSelecionadas.value.map((t) => t.uuid),
     alunosSelecionados: Array.from(alunosSelecionados.value),
     respostas: respostas.value,
     perguntaAtual: perguntaAtual.value,
@@ -211,7 +212,7 @@ onMounted(async () => {
     const uuids = draft.turmaUuids || [draft.turmaUuid]
     const turmas = todasTurmas.value.filter((t) => uuids.includes(t.uuid))
     if (turmas.length > 0) {
-      const nomes = turmas.map(t => t.nome).join(', ')
+      const nomes = turmas.map((t) => t.nome).join(', ')
       const confirmar = window.confirm(
         `Existe uma avaliação em andamento para "${nomes}". Deseja continuar de onde parou?`
       )
@@ -245,7 +246,7 @@ async function carregarTurmas() {
 }
 
 function toggleTurma(turma: Turma) {
-  const index = turmasSelecionadas.value.findIndex(t => t.uuid === turma.uuid)
+  const index = turmasSelecionadas.value.findIndex((t) => t.uuid === turma.uuid)
   if (index >= 0) {
     turmasSelecionadas.value.splice(index, 1)
   } else {
@@ -255,7 +256,9 @@ function toggleTurma(turma: Turma) {
 
 async function carregarAlunosSelecionados() {
   if (turmasSelecionadas.value.length === 0) return
-  
+  if (isCarregandoAlunos.value) return
+
+  isCarregandoAlunos.value = true
   loadingAlunos.value = true
   alunos.value = []
   habilidades.value = []
@@ -263,18 +266,16 @@ async function carregarAlunosSelecionados() {
   buscaAluno.value = ''
 
   try {
-    const promises = turmasSelecionadas.value.map(t => 
+    const promises = turmasSelecionadas.value.map((t) =>
       api.get<Aluno[]>(`/api/turmas/${t.uuid}/alunos`)
     )
     const responses = await Promise.all(promises)
-    const allAlunos = responses.flatMap(r => r.data)
-    
-    // Remover duplicatas
+    const allAlunos = responses.flatMap((r) => r.data)
+
     const descMap = new Map<string, Aluno>()
-    allAlunos.forEach(a => descMap.set(a.uuid, a))
+    allAlunos.forEach((a) => descMap.set(a.uuid, a))
     alunos.value = Array.from(descMap.values())
 
-    // Determinar o nível alvo
     let nivelUuid: string | null = null
     for (const t of turmasSelecionadas.value) {
       if (t.nivelAlvo?.uuid) {
@@ -319,17 +320,18 @@ async function carregarAlunosSelecionados() {
       toast.add({
         severity: 'warn',
         summary: 'Nível não identificado',
-        detail: 'Não foi possível identificar o nível para avaliação desta(s) turma(s).',
+        detail:
+          'Não foi possível identificar o nível para avaliação desta(s) turma(s).',
         life: 6000,
       })
     }
-    
+
     if (alunos.value.length === 0) {
       toast.add({
         severity: 'info',
         summary: 'Sem alunos',
         detail: 'Nenhum aluno matriculado nas turmas selecionadas.',
-        life: 4000
+        life: 4000,
       })
     } else {
       etapa.value = 2
@@ -342,6 +344,7 @@ async function carregarAlunosSelecionados() {
     })
   } finally {
     loadingAlunos.value = false
+    isCarregandoAlunos.value = false
   }
 }
 
@@ -805,7 +808,7 @@ function avatarTxtCls(resp: boolean | undefined): string {
             @click="toggleTurma(turma)"
             class="flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left hover:border-sky-300 hover:bg-sky-50 group"
             :class="
-              turmasSelecionadas.some(t => t.uuid === turma.uuid)
+              turmasSelecionadas.some((t) => t.uuid === turma.uuid)
                 ? 'border-sky-400 bg-sky-50 ring-2 ring-sky-100'
                 : 'border-slate-100 bg-slate-50'
             "
@@ -840,7 +843,7 @@ function avatarTxtCls(resp: boolean | undefined): string {
               </div>
             </div>
             <i
-              v-if="turmasSelecionadas.some(t => t.uuid === turma.uuid)"
+              v-if="turmasSelecionadas.some((t) => t.uuid === turma.uuid)"
               class="pi pi-check-circle text-sky-500 shrink-0"
             ></i>
           </button>
@@ -857,7 +860,9 @@ function avatarTxtCls(resp: boolean | undefined): string {
           class="flex items-center gap-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-sm shadow-sky-200 active:scale-95"
         >
           <i v-if="loadingAlunos" class="pi pi-spin pi-spinner"></i>
-          Selecionar Alunos <span v-if="!loadingAlunos">({{ turmasSelecionadas.length }})</span> <i class="pi pi-arrow-right text-sm"></i>
+          Selecionar Alunos
+          <span v-if="!loadingAlunos">({{ turmasSelecionadas.length }})</span>
+          <i class="pi pi-arrow-right text-sm"></i>
         </button>
       </div>
     </template>
@@ -875,13 +880,20 @@ function avatarTxtCls(resp: boolean | undefined): string {
         <div
           class="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0"
         >
-          {{ turmasSelecionadas.length > 1 ? '+' : turmasSelecionadas[0]?.nome.charAt(0).toUpperCase() }}
+          {{
+            turmasSelecionadas.length > 1
+              ? '+'
+              : turmasSelecionadas[0]?.nome.charAt(0).toUpperCase()
+          }}
         </div>
         <div>
           <p class="font-semibold text-sky-800 text-sm">
-            {{ turmasSelecionadas.map(t => t.nome).join(', ') }}
+            {{ turmasSelecionadas.map((t) => t.nome).join(', ') }}
           </p>
-          <p v-if="turmasSelecionadas[0]?.nivelAlvo" class="text-xs text-sky-500">
+          <p
+            v-if="turmasSelecionadas[0]?.nivelAlvo"
+            class="text-xs text-sky-500"
+          >
             {{ turmasSelecionadas[0].nivelAlvo.nome }} ·
             {{ habilidadesAtivas.length }} habilidade(s)
           </p>
