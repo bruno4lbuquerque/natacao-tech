@@ -478,7 +478,7 @@
                     {{ aluno.nome }}
                   </p>
                   <p class="text-xs text-slate-400">
-                    {{ aluno.nivel || 'Sem nível' }}
+                    {{ aluno.nivelNome || 'Sem nível' }}
                   </p>
                 </div>
               </div>
@@ -493,11 +493,33 @@
                       (c) => c.uuid !== selectedClass!.uuid
                     )
                   "
-                  optionLabel="nome"
                   optionValue="uuid"
                   placeholder="Transferir para..."
-                  class="w-40 text-xs"
-                />
+                  class="w-56 text-xs"
+                >
+                  <template #value="{ value: v }">
+                    <span v-if="v">
+                      {{ classesStore.classes.find((c) => c.uuid === v)?.nome }}
+                    </span>
+                    <span v-else class="text-slate-400"
+                      >Transferir para...</span
+                    >
+                  </template>
+                  <template #option="{ option }">
+                    <div class="flex flex-col py-0.5">
+                      <span class="font-semibold text-slate-800 text-xs">{{
+                        option.nome
+                      }}</span>
+                      <span class="text-[10px] text-slate-500">
+                        {{ formatDays(option.diasSemana).join(', ') }}
+                        · {{ formatarHorario(option.horarioInicio) }}
+                        <span v-if="option.nivelAlvo?.nome">
+                          · {{ option.nivelAlvo.nome }}</span
+                        >
+                      </span>
+                    </div>
+                  </template>
+                </Select>
                 <Button
                   icon="pi pi-arrow-right-arrow-left"
                   severity="secondary"

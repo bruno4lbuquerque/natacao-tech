@@ -171,26 +171,67 @@
       </div>
 
       <!-- Paginação -->
-      <div v-if="studentsStore.pagination.totalPages > 1" class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-white">
+      <div
+        v-if="studentsStore.pagination.totalPages > 1"
+        class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-white"
+      >
         <span class="text-sm text-slate-500">
-          Mostrando página {{ studentsStore.pagination.currentPage + 1 }} de {{ studentsStore.pagination.totalPages }} (Total: {{ studentsStore.pagination.totalElements }})
+          Mostrando página {{ studentsStore.pagination.currentPage + 1 }} de
+          {{ studentsStore.pagination.totalPages }} (Total:
+          {{ studentsStore.pagination.totalElements }})
         </span>
         <div class="flex items-center gap-1">
-          <button @click="mudarPagina(0)" :disabled="studentsStore.pagination.currentPage === 0" class="px-2.5 py-1.5 text-sm border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed" title="Primeira">
+          <button
+            @click="mudarPagina(0)"
+            :disabled="studentsStore.pagination.currentPage === 0"
+            class="px-2.5 py-1.5 text-sm border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Primeira"
+          >
             <i class="pi pi-angle-double-left text-xs"></i>
           </button>
-          <button @click="mudarPagina(studentsStore.pagination.currentPage - 1)" :disabled="studentsStore.pagination.currentPage === 0" class="px-2.5 py-1.5 text-sm border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed" title="Anterior">
+          <button
+            @click="mudarPagina(studentsStore.pagination.currentPage - 1)"
+            :disabled="studentsStore.pagination.currentPage === 0"
+            class="px-2.5 py-1.5 text-sm border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Anterior"
+          >
             <i class="pi pi-angle-left text-xs"></i>
           </button>
-          
-          <button v-for="p in paginasVisiveis" :key="p" @click="mudarPagina(p)" :class="p === studentsStore.pagination.currentPage ? 'bg-sky-50 text-sky-600 border-sky-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'" class="w-8 h-8 flex items-center justify-center text-sm border rounded-md transition-colors">
+
+          <button
+            v-for="p in paginasVisiveis"
+            :key="p"
+            @click="mudarPagina(p)"
+            :class="
+              p === studentsStore.pagination.currentPage
+                ? 'bg-sky-50 text-sky-600 border-sky-200'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+            "
+            class="w-8 h-8 flex items-center justify-center text-sm border rounded-md transition-colors"
+          >
             {{ p + 1 }}
           </button>
 
-          <button @click="mudarPagina(studentsStore.pagination.currentPage + 1)" :disabled="studentsStore.pagination.currentPage === studentsStore.pagination.totalPages - 1" class="px-2.5 py-1.5 text-sm border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed" title="Próxima">
+          <button
+            @click="mudarPagina(studentsStore.pagination.currentPage + 1)"
+            :disabled="
+              studentsStore.pagination.currentPage ===
+              studentsStore.pagination.totalPages - 1
+            "
+            class="px-2.5 py-1.5 text-sm border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Próxima"
+          >
             <i class="pi pi-angle-right text-xs"></i>
           </button>
-          <button @click="mudarPagina(studentsStore.pagination.totalPages - 1)" :disabled="studentsStore.pagination.currentPage === studentsStore.pagination.totalPages - 1" class="px-2.5 py-1.5 text-sm border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed" title="Última">
+          <button
+            @click="mudarPagina(studentsStore.pagination.totalPages - 1)"
+            :disabled="
+              studentsStore.pagination.currentPage ===
+              studentsStore.pagination.totalPages - 1
+            "
+            class="px-2.5 py-1.5 text-sm border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Última"
+          >
             <i class="pi pi-angle-double-right text-xs"></i>
           </button>
         </div>
@@ -332,7 +373,8 @@
                         <input
                           type="checkbox"
                           :value="c.uuid"
-                          v-model="form.turmasIds"
+                          :checked="form.turmasIds.includes(c.uuid)"
+                          @change="toggleTurmaAluno(c.uuid)"
                           class="rounded text-sky-500 focus:ring-sky-500 border-slate-300 w-4 h-4 shrink-0"
                         />
                         <div class="flex flex-col min-w-0">
@@ -477,6 +519,7 @@ import Dialog from 'primevue/dialog'
 import { useStudentsStore } from '../stores/students'
 import { useClassesStore } from '../../classes/stores/classes'
 import { useLevelsStore } from '../../levels/stores/levels'
+import api from '@/core/services/api'
 
 const studentsStore = useStudentsStore()
 const classesStore = useClassesStore()
@@ -565,37 +608,54 @@ let debounceTimeout: any = null
 watch(buscaNome, (newVal) => {
   clearTimeout(debounceTimeout)
   debounceTimeout = setTimeout(() => {
-    studentsStore.fetchStudents({ page: 0, nome: newVal, semTurma: filtroProfessor.value === 'sem_turma' })
+    studentsStore.fetchStudents({
+      page: 0,
+      nome: newVal,
+      semTurma: filtroProfessor.value === 'sem_turma',
+    })
   }, 500)
 })
+
+function toggleTurmaAluno(uuid: string) {
+  const idx = form.value.turmasIds.indexOf(uuid)
+  if (idx >= 0) {
+    form.value.turmasIds.splice(idx, 1)
+  } else {
+    form.value.turmasIds.push(uuid)
+  }
+}
 
 async function onFiltroProfessorChange() {
   await studentsStore.fetchStudents({
     page: 0,
     nome: buscaNome.value,
-    semTurma: filtroProfessor.value === 'sem_turma'
+    semTurma: filtroProfessor.value === 'sem_turma',
   })
 }
 
 async function mudarPagina(page: number) {
   if (page < 0 || page >= studentsStore.pagination.totalPages) return
-  await studentsStore.fetchStudents({ page, nome: buscaNome.value, semTurma: filtroProfessor.value === 'sem_turma' })
+  await studentsStore.fetchStudents({
+    page,
+    nome: buscaNome.value,
+    semTurma: filtroProfessor.value === 'sem_turma',
+  })
 }
 
 const paginasVisiveis = computed(() => {
   const current = studentsStore.pagination.currentPage
   const total = studentsStore.pagination.totalPages
-  
+
   if (total <= 5) return Array.from({ length: total }, (_, i) => i)
-  
+
   let start = Math.max(0, current - 2)
   let end = Math.min(total - 1, current + 2)
-  
+
   if (end - start < 4) {
     if (start === 0) end = Math.min(4, total - 1)
     else if (end === total - 1) start = Math.max(0, total - 5)
   }
-  
+
   const pages = []
   for (let i = start; i <= end; i++) {
     pages.push(i)
@@ -616,7 +676,9 @@ async function toggleFiltro() {
   if (mostrarApenasMeus.value && studentsStore.fetchMeusAlunos) {
     await studentsStore.fetchMeusAlunos()
   } else {
-    await studentsStore.fetchStudents({ semTurma: filtroProfessor.value === 'sem_turma' })
+    await studentsStore.fetchStudents({
+      semTurma: filtroProfessor.value === 'sem_turma',
+    })
   }
 }
 
@@ -630,29 +692,47 @@ async function abrirHistorico(uuid: string) {
 async function openModal(student?: any) {
   filtroModalProfessor.value = ''
 
-  if (levelsStore.levels.length === 0) {
-    await levelsStore.fetchLevels()
-  }
+  const promises: Promise<any>[] = []
+  if (levelsStore.levels.length === 0) promises.push(levelsStore.fetchLevels())
+  if (classesStore.classes.length === 0)
+    promises.push(classesStore.fetchClasses())
+  if (promises.length > 0) await Promise.all(promises)
 
   if (student) {
     editingId.value = student.id
 
-    const selectedClassIds =
-      student.turmas && student.turmas.length > 0
-        ? (student.turmas
-            .map((nome: string) => {
-              const cls = classesStore.classes.find((c) => c.nome === nome)
-              return cls ? cls.uuid : null
-            })
-            .filter(Boolean) as string[])
-        : []
+    let turmasIdsAtuais: string[] = []
+    try {
+      const { data } = await api.get(`/api/alunos/${student.id}`)
+      if (Array.isArray(data.turmasIds)) {
+        turmasIdsAtuais = data.turmasIds
+      } else if (Array.isArray(data.turmas)) {
+        turmasIdsAtuais = data.turmas
+          .map((t: any) => {
+            if (typeof t === 'string') {
+              return (
+                classesStore.classes.find((c) => c.nome === t)?.uuid ?? null
+              )
+            }
+            return t?.uuid ?? null
+          })
+          .filter(Boolean) as string[]
+      }
+    } catch {
+      turmasIdsAtuais = (student.turmas ?? [])
+        .map(
+          (nome: string) =>
+            classesStore.classes.find((c) => c.nome === nome)?.uuid ?? null
+        )
+        .filter(Boolean) as string[]
+    }
 
     form.value = {
       name: student.name,
       dataNascimento: student.dataNascimento || '',
       nivelId: student.nivelId,
       level: student.level || 'Iniciante',
-      turmasIds: selectedClassIds,
+      turmasIds: turmasIdsAtuais,
       status: student.status,
       contact: student.contact,
     }
