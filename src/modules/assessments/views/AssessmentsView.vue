@@ -45,6 +45,22 @@ interface Historico {
   pontuacaoTotal: number
   promovido: boolean
   observacoes: string | null
+  habilidadesAprovadas?: {
+    uuid: string
+    descricao: string
+    categoria: string
+  }[]
+}
+
+interface HistoricoDetalhe {
+  uuid: string
+  dataAvaliacao: string
+  nivelNome: string
+  corTouca: string | null
+  pontuacaoTotal: number
+  promovido: boolean
+  observacoes: string | null
+  habilidadesAprovadas: { uuid: string; descricao: string; categoria: string }[]
 }
 
 const observacoes = ref<Record<string, string>>({})
@@ -78,6 +94,16 @@ const baixandoPdf = ref<Record<string, boolean>>({})
 const enviandoWA = ref<Record<string, boolean>>({})
 
 const modalConfirmarSalvar = ref(false)
+
+// T9 — edição de avaliação existente
+const modalEditarHistorico = ref(false)
+const editandoHistorico = ref<HistoricoDetalhe | null>(null)
+const editHabilidadesIds = ref<string[]>([])
+const editObservacao = ref('')
+const editPromoverManual = ref(false)
+const editHabilidades = ref<Habilidade[]>([])
+const salvandoEdicao = ref(false)
+const loadingEditDetalhe = ref(false)
 
 const DRAFT_KEY = 'avaliacao_rascunho'
 
@@ -613,6 +639,103 @@ async function enviarWhatsApp(hist: Historico) {
     }
   } finally {
     enviandoWA.value[hist.uuid] = false
+  }
+}
+
+async function editarHistorico(hist: Historico) {
+  loadingEditDetalhe.value = true
+  modalEditarHistorico.value = true
+  editandoHistorico.value = null
+  editHabilidadesIds.value = []
+  editObservacao.value = ''
+  editPromoverManual.value = false
+  editHabilidades.value = []
+
+  try {
+    const { data } = await api.get(`/api/avaliacoes/${hist.uuid}`)
+    const detalhe: HistoricoDetalhe = data
+    editandoHistorico.value = detalhe
+    editHabilidadesIds.value = (detalhe.habilidadesAprovadas ?? []).map(
+      (h) => h.uuid
+    )
+    editObservacao.value = detalhe.observacoes ?? ''
+    editPromoverManual.value = detalhe.promovido ?? false
+
+    if (alunoModal.value) {
+      try {
+        const { data: alunoData } = await api.get(
+          `/api/alunos/${alunoModal.value.uuid}`
+        )
+        const nivelUuid =
+          typeof alunoData.nivelAtual === 'object'
+            ? alunoData.nivelAtual?.uuid
+            : null
+        if (nivelUuid) {
+          const { data: habsData } = await api.get<Habilidade[]>(
+            `/api/niveis/${nivelUuid}/habilidades`
+          )
+          const lista = Array.isArray(habsData)
+            ? habsData
+            : (habsData as any).content || []
+          editHabilidades.value = lista.filter((h: any) => h.ativo !== false)
+        }
+      } catch {
+        editHabilidades.value = (detalhe.habilidadesAprovadas ?? []).map(
+          (h) => ({
+            ...h,
+            ativo: true,
+          })
+        )
+      }
+    }
+  } catch {
+    toast.add({
+      severity: 'error',
+      summary: 'Erro',
+      detail: 'Falha ao carregar detalhes da avaliação.',
+    })
+    modalEditarHistorico.value = false
+  } finally {
+    loadingEditDetalhe.value = false
+  }
+}
+
+function toggleEditHabilidade(uuid: string) {
+  const idx = editHabilidadesIds.value.indexOf(uuid)
+  if (idx >= 0) editHabilidadesIds.value.splice(idx, 1)
+  else editHabilidadesIds.value.push(uuid)
+}
+
+async function salvarEdicaoHistorico() {
+  if (!editandoHistorico.value) return
+  salvandoEdicao.value = true
+  try {
+    await api.put(`/api/avaliacoes/${editandoHistorico.value.uuid}`, {
+      habilidadesAprovadasIds: editHabilidadesIds.value,
+      observacao: editObservacao.value.trim() || null,
+      promoverManual: editPromoverManual.value,
+    })
+    toast.add({
+      severity: 'success',
+      summary: 'Avaliação atualizada!',
+      detail: 'As alterações foram salvas com sucesso.',
+      life: 4000,
+    })
+    modalEditarHistorico.value = false
+    if (alunoModal.value) await abrirHistorico(alunoModal.value)
+  } catch (e: any) {
+    const msg =
+      e.response?.data?.message ??
+      e.response?.data?.mensagem ??
+      'Falha ao atualizar avaliação.'
+    toast.add({
+      severity: 'error',
+      summary: 'Erro ao salvar',
+      detail: msg,
+      life: 6000,
+    })
+  } finally {
+    salvandoEdicao.value = false
   }
 }
 
@@ -1401,6 +1524,14 @@ function avatarTxtCls(resp: boolean | undefined): string {
             </div>
             <div class="flex flex-col gap-2 shrink-0">
               <Button
+                icon="pi pi-pencil"
+                label="Editar"
+                size="small"
+                severity="secondary"
+                outlined
+                @click="editarHistorico(hist)"
+              />
+              <Button
                 icon="pi pi-file-pdf"
                 label="PDF"
                 size="small"
@@ -1421,6 +1552,137 @@ function avatarTxtCls(resp: boolean | undefined): string {
           </div>
         </div>
       </div>
+    </Dialog>
+    <Dialog
+      v-model:visible="modalEditarHistorico"
+      modal
+      header="Editar Avaliação"
+      :style="{ width: '32rem' }"
+    >
+      <div v-if="loadingEditDetalhe" class="flex justify-center py-10">
+        <i class="pi pi-spin pi-spinner text-3xl text-sky-400"></i>
+      </div>
+
+      <div v-else-if="editandoHistorico" class="space-y-4 pt-1">
+        <div
+          class="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2"
+        >
+          <i class="pi pi-calendar"></i>
+          <span>{{ formatarData(editandoHistorico.dataAvaliacao) }}</span>
+          <span class="mx-1 text-slate-300">·</span>
+          <span
+            class="font-bold px-2 py-0.5 rounded-full text-white text-[11px]"
+            :style="getCorTouca(editandoHistorico.corTouca)"
+            :class="!editandoHistorico.corTouca ? 'bg-sky-500' : ''"
+          >
+            {{ editandoHistorico.nivelNome }}
+          </span>
+        </div>
+
+        <div v-if="editHabilidades.length > 0">
+          <p
+            class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2"
+          >
+            Habilidades
+          </p>
+          <div class="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+            <label
+              v-for="hab in editHabilidades"
+              :key="hab.uuid"
+              class="flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all"
+              :class="
+                editHabilidadesIds.includes(hab.uuid)
+                  ? 'border-emerald-300 bg-emerald-50'
+                  : 'border-slate-100 bg-white hover:border-slate-200'
+              "
+            >
+              <div
+                class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all"
+                :class="
+                  editHabilidadesIds.includes(hab.uuid)
+                    ? 'bg-emerald-500 border-emerald-500'
+                    : 'border-slate-300 bg-white'
+                "
+                @click="toggleEditHabilidade(hab.uuid)"
+              >
+                <i
+                  v-if="editHabilidadesIds.includes(hab.uuid)"
+                  class="pi pi-check text-white"
+                  style="font-size: 0.55rem"
+                ></i>
+              </div>
+              <span
+                class="text-xs font-medium"
+                :class="
+                  editHabilidadesIds.includes(hab.uuid)
+                    ? 'text-emerald-700'
+                    : 'text-slate-600'
+                "
+                @click="toggleEditHabilidade(hab.uuid)"
+              >
+                {{ hab.descricao }}
+              </span>
+              <span class="ml-auto text-[10px] text-slate-400 shrink-0">{{
+                hab.categoria
+              }}</span>
+            </label>
+          </div>
+          <p class="text-xs text-slate-400 mt-1.5">
+            {{ editHabilidadesIds.length }} habilidade(s) aprovada(s)
+          </p>
+        </div>
+
+        <div>
+          <label
+            class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5"
+          >
+            Observação
+          </label>
+          <textarea
+            v-model="editObservacao"
+            rows="3"
+            placeholder="Observação corrigida..."
+            class="w-full text-sm border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 resize-none bg-slate-50"
+          ></textarea>
+        </div>
+
+        <label class="flex items-center gap-2 cursor-pointer">
+          <div
+            class="w-4 h-4 rounded border-2 flex items-center justify-center transition-all"
+            :class="
+              editPromoverManual
+                ? 'bg-amber-500 border-amber-500'
+                : 'border-slate-300 bg-white'
+            "
+            @click="editPromoverManual = !editPromoverManual"
+          >
+            <i
+              v-if="editPromoverManual"
+              class="pi pi-check text-white"
+              style="font-size: 0.55rem"
+            ></i>
+          </div>
+          <span class="text-xs font-semibold text-slate-600"
+            >Forçar promoção de nível</span
+          >
+        </label>
+      </div>
+
+      <template #footer>
+        <Button
+          label="Cancelar"
+          text
+          severity="secondary"
+          @click="modalEditarHistorico = false"
+        />
+        <Button
+          label="Salvar Alterações"
+          icon="pi pi-check"
+          :loading="salvandoEdicao"
+          :disabled="loadingEditDetalhe"
+          @click="salvarEdicaoHistorico"
+        />
+      </template>
     </Dialog>
   </div>
 </template>

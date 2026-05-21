@@ -58,6 +58,34 @@
           </option>
         </select>
 
+        <div class="flex items-center gap-1 flex-wrap">
+          <button
+            v-for="dia in DIAS_SEMANA"
+            :key="dia.value"
+            @click="toggleDiaSemana(dia.value)"
+            class="text-xs font-bold px-2.5 py-1.5 rounded-lg border transition-colors"
+            :class="
+              diasSemanaSelecionados.includes(dia.value)
+                ? 'bg-sky-500 text-white border-sky-500 shadow-sm'
+                : 'bg-white text-slate-500 border-slate-200 hover:border-sky-300 hover:text-sky-600'
+            "
+            :title="dia.value"
+          >
+            {{ dia.label }}
+          </button>
+          <button
+            v-if="diasSemanaSelecionados.length > 0"
+            @click="
+              diasSemanaSelecionados = []
+              fetchComFiltros()
+            "
+            class="text-xs text-slate-400 hover:text-red-500 px-1.5 py-1 transition-colors"
+            title="Limpar filtro de dias"
+          >
+            <i class="pi pi-times"></i>
+          </button>
+        </div>
+
         <span
           v-if="buscaNome || filtroProfessor"
           class="text-xs text-slate-400 font-medium whitespace-nowrap"
@@ -170,7 +198,6 @@
         </table>
       </div>
 
-      <!-- Paginação -->
       <div
         v-if="studentsStore.pagination.totalPages > 1"
         class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-white"
@@ -531,6 +558,16 @@ const mostrarApenasMeus = ref(false)
 const filtroProfessor = ref('')
 const filtroModalProfessor = ref('')
 const buscaNome = ref('')
+const diasSemanaSelecionados = ref<string[]>([])
+const DIAS_SEMANA = [
+  { label: 'Seg', value: 'SEGUNDA' },
+  { label: 'Ter', value: 'TERCA' },
+  { label: 'Qua', value: 'QUARTA' },
+  { label: 'Qui', value: 'QUINTA' },
+  { label: 'Sex', value: 'SEXTA' },
+  { label: 'Sáb', value: 'SABADO' },
+  { label: 'Dom', value: 'DOMINGO' },
+]
 
 const historicoModal = ref<{ visivel: boolean; dados: any[] }>({
   visivel: false,
@@ -604,15 +641,30 @@ const alunosFiltrados = computed(() => {
   return lista
 })
 
+function toggleDiaSemana(dia: string) {
+  const idx = diasSemanaSelecionados.value.indexOf(dia)
+  if (idx >= 0) diasSemanaSelecionados.value.splice(idx, 1)
+  else diasSemanaSelecionados.value.push(dia)
+  fetchComFiltros()
+}
+
+function fetchComFiltros(page = 0) {
+  const params: Record<string, any> = {
+    page,
+    nome: buscaNome.value,
+    semTurma: filtroProfessor.value === 'sem_turma',
+  }
+  if (diasSemanaSelecionados.value.length > 0) {
+    params.diaSemana = diasSemanaSelecionados.value[0]
+  }
+  return studentsStore.fetchStudents(params)
+}
+
 let debounceTimeout: any = null
-watch(buscaNome, (newVal) => {
+watch(buscaNome, () => {
   clearTimeout(debounceTimeout)
   debounceTimeout = setTimeout(() => {
-    studentsStore.fetchStudents({
-      page: 0,
-      nome: newVal,
-      semTurma: filtroProfessor.value === 'sem_turma',
-    })
+    fetchComFiltros()
   }, 500)
 })
 
@@ -626,20 +678,12 @@ function toggleTurmaAluno(uuid: string) {
 }
 
 async function onFiltroProfessorChange() {
-  await studentsStore.fetchStudents({
-    page: 0,
-    nome: buscaNome.value,
-    semTurma: filtroProfessor.value === 'sem_turma',
-  })
+  await fetchComFiltros()
 }
 
 async function mudarPagina(page: number) {
   if (page < 0 || page >= studentsStore.pagination.totalPages) return
-  await studentsStore.fetchStudents({
-    page,
-    nome: buscaNome.value,
-    semTurma: filtroProfessor.value === 'sem_turma',
-  })
+  await fetchComFiltros(page)
 }
 
 const paginasVisiveis = computed(() => {
