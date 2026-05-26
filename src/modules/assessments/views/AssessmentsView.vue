@@ -39,7 +39,7 @@ interface Habilidade {
 }
 interface Historico {
   uuid: string
-  dataAvaliacao: string
+  dataAvaliacao: string | number[]
   nivelNome: string
   corTouca: string | null
   pontuacaoTotal: number
@@ -54,7 +54,7 @@ interface Historico {
 
 interface HistoricoDetalhe {
   uuid: string
-  dataAvaliacao: string
+  dataAvaliacao: string | number[]
   nivelNome: string
   corTouca: string | null
   pontuacaoTotal: number
@@ -71,7 +71,7 @@ const todasTurmas = ref<Turma[]>([])
 const turmasSelecionadas = ref<Turma[]>([])
 const loadingTurmas = ref(false)
 const loadingAlunos = ref(false)
-const isCarregandoAlunos = ref(false) // flag de inflight
+const isCarregandoAlunos = ref(false)
 
 const alunos = ref<Aluno[]>([])
 const habilidades = ref<Habilidade[]>([])
@@ -95,7 +95,6 @@ const enviandoWA = ref<Record<string, boolean>>({})
 
 const modalConfirmarSalvar = ref(false)
 
-// T9 — edição de avaliação existente
 const modalEditarHistorico = ref(false)
 const editandoHistorico = ref<HistoricoDetalhe | null>(null)
 const editHabilidadesIds = ref<string[]>([])
@@ -579,7 +578,16 @@ async function abrirHistorico(aluno: Aluno) {
   loadingHistorico.value = true
   try {
     const { data } = await api.get(`/api/alunos/${aluno.uuid}/historico`)
-    historico.value = data.content || data
+    const lista: Historico[] = data.content || data
+    historico.value = lista.sort((a, b) => {
+      const da = Array.isArray(a.dataAvaliacao)
+        ? new Date(...(a.dataAvaliacao as [number, number, number])).getTime()
+        : new Date(a.dataAvaliacao as string).getTime()
+      const db = Array.isArray(b.dataAvaliacao)
+        ? new Date(...(b.dataAvaliacao as [number, number, number])).getTime()
+        : new Date(b.dataAvaliacao as string).getTime()
+      return db - da
+    })
   } catch {
     toast.add({
       severity: 'error',
@@ -681,10 +689,7 @@ async function editarHistorico(hist: Historico) {
         }
       } catch {
         editHabilidades.value = (detalhe.habilidadesAprovadas ?? []).map(
-          (h) => ({
-            ...h,
-            ativo: true,
-          })
+          (h) => ({ ...h, ativo: true })
         )
       }
     }

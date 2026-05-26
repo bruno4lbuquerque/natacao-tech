@@ -129,10 +129,12 @@ export const useStudentsStore = defineStore('students', () => {
 
   async function updateStudent(id: string, payload: any) {
     const { novasTurmasIds, ...dadosAluno } = payload
-    await api.put(`/api/alunos/${id}`, dadosAluno)
+
+    const promises: Promise<any>[] = [api.put(`/api/alunos/${id}`, dadosAluno)]
     if (novasTurmasIds !== undefined) {
-      await api.put(`/api/alunos/${id}/turmas`, { turmasIds: novasTurmasIds })
+      promises.push(api.put(`/api/alunos/${id}/turmas`, { turmasIds: novasTurmasIds }))
     }
+    await Promise.all(promises)
     await fetchStudents()
   }
 

@@ -414,13 +414,13 @@
         >
           <Select
             v-model="alunoParaMatricular"
-            :options="alunosSemTurma"
+            :options="todosAlunos"
             optionLabel="nome"
             optionValue="uuid"
-            placeholder="Selecionar aluno sem turma..."
+            placeholder="Selecionar aluno..."
             class="flex-1"
             filter
-            :emptyMessage="'Todos os alunos já possuem turma'"
+            :emptyMessage="'Nenhum aluno encontrado'"
           />
           <Button
             label="Matricular"
@@ -613,7 +613,7 @@ const showStudentsModal = ref(false)
 const selectedClass = ref<any>(null)
 const classStudents = ref<any[]>([])
 const loadingStudents = ref(false)
-const alunosSemTurma = ref<any[]>([])
+const todosAlunos = ref<any[]>([])
 const alunoParaMatricular = ref<string | null>(null)
 const matriculando = ref(false)
 const transferirParaId = ref<Record<string, string>>({})
@@ -720,7 +720,7 @@ onMounted(async () => {
     classesStore.fetchClasses(),
     levelsStore.fetchLevels(),
     carregarProfessores(),
-    carregarAlunosSemTurma(),
+    carregarTodosAlunos(),
   ])
 })
 
@@ -733,10 +733,14 @@ async function carregarProfessores() {
   }
 }
 
-async function carregarAlunosSemTurma() {
+async function carregarTodosAlunos() {
   try {
-    const { data } = await api.get<any[]>('/api/turmas/alunos/sem-turma')
-    alunosSemTurma.value = data
+    const { data } = await api.get<any>('/api/alunos?size=500')
+    const lista = data?.content ?? data ?? []
+    todosAlunos.value = lista.map((a: any) => ({
+      uuid: a.uuid ?? a.id,
+      nome: a.nome ?? a.name,
+    }))
   } catch {}
 }
 
@@ -872,10 +876,7 @@ async function openStudentsModal(turma: any) {
   alunoParaMatricular.value = null
   transferirParaId.value = {}
   showStudentsModal.value = true
-  await Promise.all([
-    carregarAlunosDaTurma(turma.uuid),
-    carregarAlunosSemTurma(),
-  ])
+  await Promise.all([carregarAlunosDaTurma(turma.uuid), carregarTodosAlunos()])
 }
 
 async function matricularAluno() {
@@ -888,7 +889,6 @@ async function matricularAluno() {
     alunoParaMatricular.value = null
     await Promise.all([
       carregarAlunosDaTurma(selectedClass.value.uuid),
-      carregarAlunosSemTurma(),
       classesStore.fetchClasses(),
     ])
     selectedClass.value =
@@ -926,7 +926,6 @@ async function removerAluno(alunoUuid: string, nome: string) {
         )
         await Promise.all([
           carregarAlunosDaTurma(selectedClass.value!.uuid),
-          carregarAlunosSemTurma(),
           classesStore.fetchClasses(),
         ])
         selectedClass.value =
