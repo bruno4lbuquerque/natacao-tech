@@ -75,10 +75,7 @@
           </button>
           <button
             v-if="diasSemanaSelecionados.length > 0"
-            @click="
-              diasSemanaSelecionados.splice(0)
-              fetchComFiltros()
-            "
+            @click="limparFiltrosDia()"
             class="text-xs text-slate-400 hover:text-red-500 px-1.5 py-1 transition-colors"
             title="Limpar filtro de dias"
           >
@@ -198,6 +195,7 @@
         </table>
       </div>
 
+      <!-- Paginação -->
       <div
         v-if="studentsStore.pagination.totalPages > 1"
         class="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-white"
@@ -641,6 +639,11 @@ const alunosFiltrados = computed(() => {
   return lista
 })
 
+function limparFiltrosDia() {
+  diasSemanaSelecionados.value.splice(0)
+  fetchComFiltros()
+}
+
 function toggleDiaSemana(dia: string) {
   const idx = diasSemanaSelecionados.value.indexOf(dia)
   if (idx >= 0) diasSemanaSelecionados.value.splice(idx, 1)
@@ -661,7 +664,7 @@ function fetchComFiltros(page = 0) {
 }
 
 let debounceTimeout: any = null
-watch(buscaNome, (newVal) => {
+watch(buscaNome, () => {
   clearTimeout(debounceTimeout)
   debounceTimeout = setTimeout(() => {
     fetchComFiltros()
