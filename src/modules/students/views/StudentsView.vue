@@ -76,7 +76,7 @@
           <button
             v-if="diasSemanaSelecionados.length > 0"
             @click="
-              diasSemanaSelecionados = []
+              diasSemanaSelecionados.splice(0)
               fetchComFiltros()
             "
             class="text-xs text-slate-400 hover:text-red-500 px-1.5 py-1 transition-colors"
@@ -661,7 +661,7 @@ function fetchComFiltros(page = 0) {
 }
 
 let debounceTimeout: any = null
-watch(buscaNome, () => {
+watch(buscaNome, (newVal) => {
   clearTimeout(debounceTimeout)
   debounceTimeout = setTimeout(() => {
     fetchComFiltros()
