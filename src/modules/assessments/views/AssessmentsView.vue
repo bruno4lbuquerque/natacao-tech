@@ -96,6 +96,14 @@ const enviandoWA = ref<Record<string, boolean>>({})
 const modalConfirmarSalvar = ref(false)
 
 const modalEditarHistorico = ref(false)
+
+const dialogRascunho = ref({
+  visivel: false,
+  nomes: '',
+  turmas: [] as Turma[],
+  draft: null as any,
+  carregando: false,
+})
 const editandoHistorico = ref<HistoricoDetalhe | null>(null)
 const editHabilidadesIds = ref<string[]>([])
 const editObservacao = ref('')
@@ -238,14 +246,7 @@ onMounted(async () => {
     const turmas = todasTurmas.value.filter((t) => uuids.includes(t.uuid))
     if (turmas.length > 0) {
       const nomes = turmas.map((t) => t.nome).join(', ')
-      const confirmar = window.confirm(
-        `Existe uma avaliação em andamento para "${nomes}". Deseja continuar de onde parou?`
-      )
-      if (confirmar) {
-        await restaurarRascunho(turmas, draft)
-      } else {
-        limparRascunho()
-      }
+      dialogRascunho.value = { visivel: true, nomes, turmas, draft, carregando: false }
     }
   }
 })
@@ -253,6 +254,18 @@ onMounted(async () => {
 onUnmounted(() => {
   if (etapa.value >= 3) salvarRascunho()
 })
+
+async function continuarRascunho() {
+  dialogRascunho.value.carregando = true
+  await restaurarRascunho(dialogRascunho.value.turmas, dialogRascunho.value.draft)
+  dialogRascunho.value.visivel = false
+  dialogRascunho.value.carregando = false
+}
+
+function descartarRascunho() {
+  limparRascunho()
+  dialogRascunho.value.visivel = false
+}
 
 async function carregarTurmas() {
   loadingTurmas.value = true
@@ -328,10 +341,17 @@ async function carregarAlunosSelecionados() {
       const { data: habsData } = await api.get<Habilidade[]>(
         `/api/niveis/${nivelUuid}/habilidades`
       )
-      const lista = Array.isArray(habsData)
+      const lista: Habilidade[] = Array.isArray(habsData)
         ? habsData
         : (habsData as any).content || []
-      habilidades.value = lista.filter((h: any) => h.ativo !== false)
+      const ativos = lista.filter((h: any) => h.ativo !== false)
+
+      const grupos: Record<string, Habilidade[]> = {}
+      for (const h of ativos) {
+        if (!grupos[h.categoria]) grupos[h.categoria] = []
+        grupos[h.categoria].push(h)
+      }
+      habilidades.value = Object.values(grupos).flat()
 
       if (habilidades.value.length === 0) {
         toast.add({
@@ -792,6 +812,48 @@ function avatarTxtCls(resp: boolean | undefined): string {
 <template>
   <div class="max-w-3xl mx-auto space-y-5 p-4">
     <ConfirmDialog />
+
+    <Dialog
+      v-model:visible="dialogRascunho.visivel"
+      modal
+      :closable="false"
+      :style="{ width: '26rem' }"
+    >
+      <template #header>
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+            <i class="pi pi-history text-amber-600 text-base"></i>
+          </div>
+          <span class="font-bold text-slate-800 text-base">Avaliação em andamento</span>
+        </div>
+      </template>
+
+      <div class="pt-1 pb-3 space-y-2">
+        <p class="text-slate-600 text-sm leading-relaxed">
+          Existe uma avaliação salva para
+          <strong class="text-slate-800">{{ dialogRascunho.nomes }}</strong>.
+        </p>
+        <p class="text-slate-400 text-xs">
+          Deseja continuar de onde parou ou começar uma nova avaliação?
+        </p>
+      </div>
+
+      <template #footer>
+        <Button
+          label="Começar do zero"
+          text
+          severity="secondary"
+          :disabled="dialogRascunho.carregando"
+          @click="descartarRascunho"
+        />
+        <Button
+          label="Continuar"
+          icon="pi pi-play"
+          :loading="dialogRascunho.carregando"
+          @click="continuarRascunho"
+        />
+      </template>
+    </Dialog>
 
     <Dialog
       v-model:visible="modalConfirmarSalvar"

@@ -157,16 +157,14 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   const auth = useAuthStore()
 
-  if (!auth.user) {
-    auth.checkAuth()
-  }
+  auth.checkAuth()
 
-  const isAuthenticated = !!auth.user
+  const isAuthenticated = auth.isAuthenticated
   const requiresAuth = to.matched.some((r) => r.meta.requiresAuth)
   const allowedRoles = to.meta.allowedRoles
 
   if (requiresAuth && !isAuthenticated) {
-    return next('/welcome')
+    return next('/login')
   }
 
   if (to.path === '/welcome' && isAuthenticated) {

@@ -8,6 +8,7 @@ export const useClassesStore = defineStore('classes', () => {
   const loading = ref(false)
 
   async function fetchClasses() {
+    if (loading.value) return
     loading.value = true
     try {
       const response = await api.get('/api/turmas')

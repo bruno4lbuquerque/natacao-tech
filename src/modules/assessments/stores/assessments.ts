@@ -6,13 +6,20 @@ import type { HabilidadeDTO } from '@/core/types/api'
 export const useAssessmentsStore = defineStore('assessments', () => {
   const skills = ref<HabilidadeDTO[]>([])
   const loading = ref(false)
+  let skillsController: AbortController | null = null
 
   async function fetchSkills(nivelUuid: string) {
+    skillsController?.abort()
+    skillsController = new AbortController()
+
     loading.value = true
     try {
-      const response = await api.get(`/api/niveis/${nivelUuid}/habilidades`)
+      const response = await api.get(`/api/niveis/${nivelUuid}/habilidades`, {
+        signal: skillsController.signal,
+      })
       skills.value = response.data
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
       console.error('Erro ao buscar habilidades:', error)
       skills.value = []
     } finally {

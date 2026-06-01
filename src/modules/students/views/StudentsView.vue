@@ -1,4 +1,5 @@
 <template>
+  <ConfirmDialog />
   <div class="space-y-6">
     <div class="flex flex-col gap-3">
       <div class="flex justify-between items-center flex-wrap gap-3">
@@ -356,14 +357,30 @@
               </div>
 
               <div class="col-span-2">
-                <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
                   <label class="block text-sm font-semibold text-slate-700"
                     >Turmas</label
                   >
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-slate-400">
+                  <div class="flex items-center gap-2 flex-wrap justify-end">
+                    <span class="text-xs text-slate-400 whitespace-nowrap">
                       {{ form.turmasIds.length }} selecionada(s)
                     </span>
+                    <div class="flex items-center gap-0.5">
+                      <button
+                        v-for="dia in DIAS_SEMANA"
+                        :key="dia.value"
+                        type="button"
+                        @click="toggleDiaModal(dia.value)"
+                        class="text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors"
+                        :class="
+                          filtroModalDias.includes(dia.value)
+                            ? 'bg-sky-500 text-white border-sky-500'
+                            : 'bg-white text-slate-400 border-slate-200 hover:border-sky-300 hover:text-sky-600'
+                        "
+                      >
+                        {{ dia.label }}
+                      </button>
+                    </div>
                     <select
                       v-model="filtroModalProfessor"
                       class="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-500 focus:outline-none focus:border-sky-400"
@@ -541,20 +558,25 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import Dialog from 'primevue/dialog'
+import ConfirmDialog from 'primevue/confirmdialog'
+import { useToast } from 'primevue/usetoast'
+import { useConfirm } from 'primevue/useconfirm'
 import { useStudentsStore } from '../stores/students'
 import { useClassesStore } from '../../classes/stores/classes'
 import { useLevelsStore } from '../../levels/stores/levels'
-import api from '@/core/services/api'
 
 const studentsStore = useStudentsStore()
 const classesStore = useClassesStore()
 const levelsStore = useLevelsStore()
+const toast = useToast()
+const confirm = useConfirm()
 
 const showModal = ref(false)
 const editingId = ref<string | null>(null)
 const mostrarApenasMeus = ref(false)
 const filtroProfessor = ref('')
 const filtroModalProfessor = ref('')
+const filtroModalDias = ref<string[]>([])
 const buscaNome = ref('')
 const diasSemanaSelecionados = ref<string[]>([])
 const DIAS_SEMANA = [
@@ -616,11 +638,23 @@ const professoresUnicos = computed(() => {
 const professoresUnicosModal = computed(() => professoresUnicos.value)
 
 const turmasFiltradas = computed(() => {
-  if (!filtroModalProfessor.value) return classesStore.classes
-  return classesStore.classes.filter(
-    (c: any) => c.professor?.nome === filtroModalProfessor.value
-  )
+  let lista = classesStore.classes
+  if (filtroModalProfessor.value) {
+    lista = lista.filter((c: any) => c.professor?.nome === filtroModalProfessor.value)
+  }
+  if (filtroModalDias.value.length > 0) {
+    lista = lista.filter((c: any) =>
+      c.diasSemana?.some((d: string) => filtroModalDias.value.includes(d))
+    )
+  }
+  return lista
 })
+
+function toggleDiaModal(dia: string) {
+  const idx = filtroModalDias.value.indexOf(dia)
+  if (idx >= 0) filtroModalDias.value.splice(idx, 1)
+  else filtroModalDias.value.push(dia)
+}
 
 const alunosFiltrados = computed(() => {
   let lista = studentsStore.students
@@ -738,6 +772,7 @@ async function abrirHistorico(uuid: string) {
 
 async function openModal(student?: any) {
   filtroModalProfessor.value = ''
+  filtroModalDias.value = []
 
   const promises: Promise<any>[] = []
   if (levelsStore.levels.length === 0) promises.push(levelsStore.fetchLevels())
@@ -747,39 +782,12 @@ async function openModal(student?: any) {
 
   if (student) {
     editingId.value = student.id
-
-    let turmasIdsAtuais: string[] = []
-    try {
-      const { data } = await api.get(`/api/alunos/${student.id}`)
-      if (Array.isArray(data.turmasIds)) {
-        turmasIdsAtuais = data.turmasIds
-      } else if (Array.isArray(data.turmas)) {
-        turmasIdsAtuais = data.turmas
-          .map((t: any) => {
-            if (typeof t === 'string') {
-              return (
-                classesStore.classes.find((c) => c.nome === t)?.uuid ?? null
-              )
-            }
-            return t?.uuid ?? null
-          })
-          .filter(Boolean) as string[]
-      }
-    } catch {
-      turmasIdsAtuais = (student.turmas ?? [])
-        .map(
-          (nome: string) =>
-            classesStore.classes.find((c) => c.nome === nome)?.uuid ?? null
-        )
-        .filter(Boolean) as string[]
-    }
-
     form.value = {
       name: student.name,
       dataNascimento: student.dataNascimento || '',
       nivelId: student.nivelId,
       level: student.level || 'Iniciante',
-      turmasIds: turmasIdsAtuais,
+      turmasIds: (student.turmasIds ?? []).slice(),
       status: student.status,
       contact: student.contact,
     }
@@ -821,14 +829,25 @@ async function saveStudent() {
     showModal.value = false
   } catch (e) {
     console.error(e)
-    alert('Erro ao salvar o aluno. Verifique os dados.')
+    toast.add({
+      severity: 'error',
+      summary: 'Erro ao salvar',
+      detail: 'Verifique os dados e tente novamente.',
+      life: 5000,
+    })
   }
 }
 
 function deleteStudent(id: string) {
-  if (confirm('Tem certeza que deseja excluir este aluno?')) {
-    studentsStore.deleteStudent(id)
-  }
+  confirm.require({
+    message: 'Tem certeza que deseja excluir este aluno? Esta ação não pode ser desfeita.',
+    header: 'Excluir Aluno',
+    icon: 'pi pi-exclamation-triangle',
+    rejectLabel: 'Cancelar',
+    acceptLabel: 'Excluir',
+    acceptClass: 'p-button-danger',
+    accept: () => studentsStore.deleteStudent(id),
+  })
 }
 
 function formatarDataLocal(dt: string | number[]): string {

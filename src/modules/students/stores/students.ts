@@ -9,6 +9,7 @@ export interface Student {
   nivelId: string
   level: string
   turmas: string[]
+  turmasIds: string[]
   status: 'active' | 'inactive'
   contact: string
 }
@@ -17,7 +18,8 @@ export const useStudentsStore = defineStore('students', () => {
   const students = ref<Student[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  
+  let fetchController: AbortController | null = null
+
   const pagination = ref({
     currentPage: 0,
     totalPages: 0,
@@ -49,6 +51,10 @@ export const useStudentsStore = defineStore('students', () => {
       (typeof a.nivelAtual === 'object' ? a.nivelAtual?.uuid : null) ??
       ''
 
+    const listaTurmasIds: string[] = Array.isArray(a.turmasIds)
+      ? a.turmasIds.map((u: any) => String(u))
+      : []
+
     return {
       id: a.uuid ?? a.id ?? '',
       name: a.nome ?? a.name ?? '',
@@ -56,12 +62,16 @@ export const useStudentsStore = defineStore('students', () => {
       nivelId: nivelUuid,
       level: a.nivelNome ?? nivelAtualNome ?? 'Sem nível',
       turmas: listaTurmas,
+      turmasIds: listaTurmasIds,
       status: a.ativo !== false ? 'active' : 'inactive',
       contact: a.telefoneResponsavel ?? a.telefone ?? a.contact ?? '',
     }
   }
 
-  async function fetchStudents(params: { page?: number; size?: number; nome?: string; nivelUuid?: string; semTurma?: boolean } = {}) {
+  async function fetchStudents(params: { page?: number; size?: number; nome?: string; nivelUuid?: string; semTurma?: boolean; diaSemana?: string } = {}) {
+    fetchController?.abort()
+    fetchController = new AbortController()
+
     loading.value = true
     error.value = null
     const page = params.page ?? pagination.value.currentPage
@@ -74,20 +84,24 @@ export const useStudentsStore = defineStore('students', () => {
       if (params.nome) query.append('nome', params.nome)
       if (params.nivelUuid) query.append('nivelUuid', params.nivelUuid)
       if (params.semTurma) query.append('semTurma', 'true')
+      if (params.diaSemana) query.append('diaSemana', params.diaSemana)
 
-      const response = await api.get(`/api/alunos?${query.toString()}`)
+      const response = await api.get(`/api/alunos?${query.toString()}`, {
+        signal: fetchController.signal,
+      })
       const data = response.data?.content ?? response.data ?? []
       students.value = Array.isArray(data) ? data.map(mapAluno) : []
-      
+
       if (response.data && response.data.totalPages !== undefined) {
         pagination.value = {
           currentPage: response.data.number,
           totalPages: response.data.totalPages,
           totalElements: response.data.totalElements,
-          size: response.data.size
+          size: response.data.size,
         }
       }
     } catch (err: any) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
       console.error('Erro ao buscar alunos:', err)
       error.value = err.response?.data?.message ?? 'Falha ao carregar alunos.'
       students.value = []
@@ -97,13 +111,19 @@ export const useStudentsStore = defineStore('students', () => {
   }
 
   async function fetchMeusAlunos() {
+    fetchController?.abort()
+    fetchController = new AbortController()
+
     loading.value = true
     error.value = null
     try {
-      const response = await api.get('/api/alunos/meus-alunos')
+      const response = await api.get('/api/alunos/meus-alunos', {
+        signal: fetchController.signal,
+      })
       const data = response.data?.content ?? response.data ?? []
       students.value = Array.isArray(data) ? data.map(mapAluno) : []
     } catch (err: any) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
       console.error('Erro ao buscar meus alunos:', err)
       error.value = err.response?.data?.message ?? 'Falha ao carregar alunos.'
       students.value = []
