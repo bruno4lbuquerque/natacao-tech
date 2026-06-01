@@ -185,4 +185,17 @@ router.beforeEach((to, _from, next) => {
   next()
 })
 
+router.onError((err) => {
+  const chunkFailed =
+    err.message.includes('Failed to fetch dynamically imported module') ||
+    err.message.includes('Importing a module script failed') ||
+    err.message.includes('Unable to preload CSS') ||
+    err.message.includes('Load failed') ||
+    err.message.includes('error loading dynamically imported module')
+
+  if (chunkFailed) {
+    window.location.reload()
+  }
+})
+
 export default router

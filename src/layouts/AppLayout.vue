@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRoute } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import Button from 'primevue/button'
-import Sidebar from 'primevue/sidebar'
+import Drawer from 'primevue/drawer'
 
 const mobileMenuOpen = ref(false)
+const route = useRoute()
 </script>
 
 <template>
@@ -15,12 +17,14 @@ const mobileMenuOpen = ref(false)
       <AppSidebar />
     </aside>
 
-    <Sidebar
+    <Drawer
       v-model:visible="mobileMenuOpen"
-      class="w-64 md:hidden p-0 border-none"
+      :showCloseIcon="false"
+      class="w-64 !p-0"
+      style="background: #fff; border: none"
     >
       <AppSidebar @click="mobileMenuOpen = false" />
-    </Sidebar>
+    </Drawer>
 
     <div
       class="flex-1 flex flex-col min-h-screen transition-all duration-300 md:ml-64"
@@ -49,8 +53,18 @@ const mobileMenuOpen = ref(false)
 
       <main class="p-4 md:p-8 w-full max-w-7xl mx-auto">
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
+          <transition name="fade">
+            <component
+              :is="Component"
+              v-if="Component"
+              :key="route.fullPath"
+            />
+            <div
+              v-else
+              class="flex items-center justify-center min-h-[60vh]"
+            >
+              <i class="pi pi-spin pi-spinner text-sky-500 text-3xl"></i>
+            </div>
           </transition>
         </router-view>
       </main>
@@ -59,26 +73,20 @@ const mobileMenuOpen = ref(false)
 </template>
 
 <style scoped>
-:deep(.p-sidebar) {
-  padding: 0 !important;
-  background-color: #ffffff !important;
-  border: none;
-}
-:deep(.p-sidebar-content) {
+:deep(.p-drawer-content) {
   padding: 0 !important;
   height: 100%;
 }
-:deep(.p-sidebar-header) {
+:deep(.p-drawer-header) {
   display: none !important;
 }
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.15s ease-out;
+  transition: opacity 0.12s ease-out;
 }
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-  transform: translateY(5px);
 }
 </style>

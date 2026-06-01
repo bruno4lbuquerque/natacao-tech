@@ -6,18 +6,26 @@ import type { TurmaDTO, CadastroTurmaDTO } from '@/core/types/api'
 export const useClassesStore = defineStore('classes', () => {
   const classes = ref<TurmaDTO[]>([])
   const loading = ref(false)
+  let inFlightFetch: Promise<void> | null = null
 
-  async function fetchClasses() {
-    if (loading.value) return
+  function fetchClasses(): Promise<void> {
+    if (inFlightFetch) return inFlightFetch
+
     loading.value = true
-    try {
-      const response = await api.get('/api/turmas')
-      classes.value = response.data
-    } catch (error) {
-      console.error('Erro ao buscar turmas:', error)
-    } finally {
-      loading.value = false
-    }
+    inFlightFetch = api
+      .get('/api/turmas')
+      .then((response) => {
+        classes.value = response.data
+      })
+      .catch((error) => {
+        console.error('Erro ao buscar turmas:', error)
+      })
+      .finally(() => {
+        loading.value = false
+        inFlightFetch = null
+      })
+
+    return inFlightFetch
   }
 
   async function createClass(payload: CadastroTurmaDTO) {
