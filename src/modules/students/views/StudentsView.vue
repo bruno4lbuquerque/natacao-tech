@@ -1,6 +1,6 @@
 <template>
-  <ConfirmDialog />
   <div class="space-y-6">
+    <ConfirmDialog />
     <div class="flex flex-col gap-3">
       <div class="flex justify-between items-center flex-wrap gap-3">
         <div class="flex items-center gap-3 flex-wrap">
