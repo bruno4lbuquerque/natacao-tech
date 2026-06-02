@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import { ref, watch, onErrorCaptured } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, onUnmounted, onErrorCaptured } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import Button from 'primevue/button'
 import Drawer from 'primevue/drawer'
 
 const mobileMenuOpen = ref(false)
 const route = useRoute()
+const router = useRouter()
 
 const hasRouteError = ref(false)
 
-watch(() => route.fullPath, () => {
-  hasRouteError.value = false
+// Reseta ANTES da montagem do próximo componente (evita ciclo watch→remonta→erro)
+let unregisterGuard: (() => void) | null = null
+onMounted(() => {
+  unregisterGuard = router.beforeEach(() => {
+    hasRouteError.value = false
+  })
+})
+onUnmounted(() => {
+  unregisterGuard?.()
 })
 
 onErrorCaptured((err, _instance, info) => {

@@ -54,7 +54,15 @@ export const useAuthStore = defineStore('auth', () => {
       _limparSessao()
       return
     }
+    // Restaura todos os valores do localStorage caso o estado em memória tenha
+    // sido perdido (ex: HMR em dev, _limparSessao parcial, tab reload)
     token.value = storedToken
+    if (!user.value) {
+      user.value = localStorage.getItem('user')
+    }
+    if (!role.value) {
+      role.value = sanitizarRole(localStorage.getItem('role'))
+    }
     api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
   }
 
