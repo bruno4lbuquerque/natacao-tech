@@ -92,7 +92,7 @@ api.interceptors.response.use(
         const refreshResponse = await axios.post(
           '/auth/refresh',
           { refreshToken: currentRefreshToken },
-          { baseURL: api.defaults.baseURL }
+          { baseURL: api.defaults.baseURL, timeout: 10_000 }
         )
 
         const newToken = refreshResponse.data.token

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch, onErrorCaptured } from 'vue'
 import { useRoute } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import Button from 'primevue/button'
@@ -7,6 +7,18 @@ import Drawer from 'primevue/drawer'
 
 const mobileMenuOpen = ref(false)
 const route = useRoute()
+
+const hasRouteError = ref(false)
+
+watch(() => route.fullPath, () => {
+  hasRouteError.value = false
+})
+
+onErrorCaptured((err, _instance, info) => {
+  console.error('[Layout] erro capturado em rota', info, err)
+  hasRouteError.value = true
+  return false
+})
 </script>
 
 <template>
@@ -52,8 +64,23 @@ const route = useRoute()
       </header>
 
       <main class="p-4 md:p-8 w-full max-w-7xl mx-auto">
-        <router-view v-slot="{ Component }">
-          <transition name="fade">
+        <div
+          v-if="hasRouteError"
+          class="flex flex-col items-center justify-center py-24 text-center"
+        >
+          <i class="pi pi-exclamation-circle text-5xl text-red-400 mb-4"></i>
+          <p class="text-slate-600 text-lg font-medium mb-2">Erro ao carregar a página</p>
+          <p class="text-slate-400 text-sm mb-6">Verifique o console ou tente novamente.</p>
+          <button
+            class="px-5 py-2 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-600 transition-colors"
+            @click="hasRouteError = false"
+          >
+            Tentar novamente
+          </button>
+        </div>
+
+        <router-view v-else v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
             <component :is="Component" :key="route.fullPath" />
           </transition>
         </router-view>
@@ -71,12 +98,14 @@ const route = useRoute()
   display: none !important;
 }
 
-.fade-enter-active,
+/* leave instantâneo: evita flash branco entre rotas com mode="out-in" */
 .fade-leave-active {
-  transition: opacity 0.12s ease-out;
+  transition: none;
 }
-.fade-enter-from,
-.fade-leave-to {
+.fade-enter-active {
+  transition: opacity 0.15s ease-out;
+}
+.fade-enter-from {
   opacity: 0;
 }
 </style>

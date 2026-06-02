@@ -51,9 +51,10 @@ const formAcad = ref({
 const errosAcad = ref({ nome: '', endereco: '', telefone: '' })
 
 const academiasFiltradas = computed(() => {
+  const lista = Array.isArray(academias.value) ? academias.value : []
   const q = buscaAcad.value.toLowerCase()
-  if (!q) return academias.value
-  return academias.value.filter(
+  if (!q) return lista
+  return lista.filter(
     (a) =>
       a.nome?.toLowerCase().includes(q) ||
       a.endereco?.toLowerCase().includes(q) ||
@@ -66,12 +67,14 @@ onMounted(carregarAcademias)
 async function carregarAcademias() {
   loadingAcad.value = true
   try {
-    academias.value = await academiesStore.fetchAcademias()
+    const data = await academiesStore.fetchAcademias()
+    academias.value = Array.isArray(data) ? data : []
   } catch (error) {
     toast.add({
       severity: 'error',
       summary: 'Erro',
       detail: 'Falha ao carregar academias.',
+      life: 5000,
     })
   } finally {
     loadingAcad.value = false
