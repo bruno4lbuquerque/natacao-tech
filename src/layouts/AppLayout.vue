@@ -54,17 +54,7 @@ const route = useRoute()
       <main class="p-4 md:p-8 w-full max-w-7xl mx-auto">
         <router-view v-slot="{ Component }">
           <transition name="fade">
-            <component
-              :is="Component"
-              v-if="Component"
-              :key="route.fullPath"
-            />
-            <div
-              v-else
-              class="flex items-center justify-center min-h-[60vh]"
-            >
-              <i class="pi pi-spin pi-spinner text-sky-500 text-3xl"></i>
-            </div>
+            <component :is="Component" :key="route.fullPath" />
           </transition>
         </router-view>
       </main>
